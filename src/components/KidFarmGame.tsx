@@ -173,7 +173,7 @@ function drawHouse(ctx: CanvasRenderingContext2D, x: number, y: number) {
   const dx = x + w / 2 - 6, dy = y + h - 18;
   px(ctx, dx, dy, 12, 16, COLORS.woodDark);
   px(ctx, dx + 1, dy + 1, 10, 14, COLORS.wood);
-  px(ctx, dx + 9, dy + 8, 1, 2, COLORS.coin || "#f5c530");
+  px(ctx, dx + 9, dy + 8, 1, 2, "#f5c530");
   // window
   px(ctx, x + 8, y + h / 2 + 8, 10, 10, COLORS.sky);
   px(ctx, x + 8, y + h / 2 + 8, 10, 10, COLORS.sky);
