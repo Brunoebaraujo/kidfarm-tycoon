@@ -1367,15 +1367,16 @@ export default function KidFarmGame() {
               <div className="pixel-panel p-3 flex flex-col gap-2" style={{ minWidth: 320, maxWidth: 480, maxHeight: "90%", overflow: "auto" }}>
                 <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 1 }}>Market · {SEASON_LABEL[ui.season]}</div>
                 <div style={{ fontSize: 8, opacity: 0.7 }}>Last {HISTORY_DAYS} days of prices.</div>
-                {CROP_ORDER.map((id) => {
+                {PRODUCT_ORDER.map((id) => {
                   const hist = stateRef.current.history[id];
+                  const color = id === "milk" ? "#fdf6e3" : CROPS[id].fruit;
                   return (
                     <div key={id} className="pixel-panel" style={{ padding: 6 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10 }}>
-                        <strong>{CROPS[id].name}</strong>
+                        <strong>{productName(id)}</strong>
                         <span>Now: {ui.prices[id]}c</span>
                       </div>
-                      <MiniChart data={hist} color={CROPS[id].fruit} />
+                      <MiniChart data={hist} color={color} />
                     </div>
                   );
                 })}
