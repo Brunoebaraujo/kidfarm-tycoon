@@ -447,17 +447,18 @@ export default function KidFarmGame() {
   const nextTaskId = useRef(1);
 
   const initialSeason = seasonForDay(1);
-  const initialFluct: Record<CropId, number> = { wheat: 0, rice: 0, corn: 0, banana: 0 };
-  const initialHistory: Record<CropId, { day: number; price: number }[]> = {
+  const initialFluct: Record<ProductId, number> = { wheat: 0, rice: 0, corn: 0, banana: 0, milk: 0 };
+  const initialHistory: Record<ProductId, { day: number; price: number }[]> = {
     wheat: [{ day: 1, price: cropPriceFor("wheat", initialSeason, 0) }],
     rice: [{ day: 1, price: cropPriceFor("rice", initialSeason, 0) }],
     corn: [{ day: 1, price: cropPriceFor("corn", initialSeason, 0) }],
     banana: [{ day: 1, price: cropPriceFor("banana", initialSeason, 0) }],
+    milk: [{ day: 1, price: milkPriceFor(initialSeason, 0) }],
   };
 
-  const stateRef = useRef({
+  const initialState = () => ({
     coins: 25,
-    seeds: { wheat: 5, rice: 0, corn: 0, banana: 0 } as Inventory,
+    seeds: { ...emptySeeds(), wheat: 5 } as Record<CropId, number>,
     harvested: emptyInventory(),
     revenue: 0,
     expenses: 0,
@@ -471,6 +472,11 @@ export default function KidFarmGame() {
     fields: createFields(),
     workers: [makeWorker("maya", "Maya", 10 * TILE + TILE / 2, 4 * TILE + TILE / 2, COLORS.hairBlonde, COLORS.shirtRed)],
     selectedWorkerId: "maya",
+    cow: { x: COW_TILE.x * TILE + TILE / 2, y: COW_TILE.y * TILE + TILE / 2, lastMilkedDay: 0 } as Cow,
+  });
+
+  const stateRef = useRef({
+    ...initialState(),
     camera: { x: 0, y: 0, freeX: 0, freeY: 0 },
     cssScale: 2,
     viewportW: 800,
@@ -483,7 +489,7 @@ export default function KidFarmGame() {
 
   const [ui, setUi] = useState({
     coins: 25,
-    seeds: { wheat: 5, rice: 0, corn: 0, banana: 0 } as Inventory,
+    seeds: { ...emptySeeds(), wheat: 5 } as Record<CropId, number>,
     harvested: emptyInventory(),
     revenue: 0,
     expenses: 0,
@@ -495,7 +501,8 @@ export default function KidFarmGame() {
       rice: cropPriceFor("rice", initialSeason, 0),
       corn: cropPriceFor("corn", initialSeason, 0),
       banana: cropPriceFor("banana", initialSeason, 0),
-    } as Record<CropId, number>,
+      milk: milkPriceFor(initialSeason, 0),
+    } as Record<ProductId, number>,
     selectedWorkerId: "maya",
     selectedWorkerName: "Maya",
     selectedStatus: "Idle",
@@ -504,6 +511,7 @@ export default function KidFarmGame() {
     workers: [{ id: "maya", name: "Maya", status: "Idle", currentTask: "Idle", queueLength: 0, isSelected: true }] as WorkerUi[],
     message: "Selected Worker: Maya. Click soil to prepare it.",
     banner: { text: `${SEASON_LABEL[initialSeason]} has arrived`, visible: true },
+    cowReady: true,
   });
 
   const [plantPrompt, setPlantPrompt] = useState<{ tx: number; ty: number } | null>(null);
