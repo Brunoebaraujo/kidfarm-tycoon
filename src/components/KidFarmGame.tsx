@@ -629,18 +629,30 @@ export default function KidFarmGame() {
 
     if (task.kind === "deliver") {
       let total = 0;
-      for (const id of CROP_ORDER) {
+      for (const id of PRODUCT_ORDER) {
         const qty = s.harvested[id];
         if (qty <= 0) continue;
-        const price = currentPrice(id);
+        const price = id === "milk" ? milkPriceFor(s.season, s.fluct.milk) : currentPrice(id);
         const earn = qty * price;
         total += earn;
         s.harvested[id] = 0;
-        logJournal(`Sold ${qty} ${CROPS[id].name} for ${price}c each (+${earn}c)`);
+        logJournal(`Sold ${qty} ${productName(id)} for ${price}c each (+${earn}c)`);
       }
       s.coins += total;
       s.revenue += total;
       addFloater(worker.x, worker.y - 24, `+${total}c`, "#f5c530");
+      return;
+    }
+
+    if (task.kind === "milk") {
+      if (s.cow.lastMilkedDay === s.day) {
+        setMessage("The cow has already been milked today.");
+        return;
+      }
+      s.cow.lastMilkedDay = s.day;
+      s.harvested.milk += MILK_YIELD;
+      addFloater(worker.x, worker.y - 24, `+${MILK_YIELD} Milk`, "#fdf6e3");
+      logJournal(`${worker.name} milked the cow (+${MILK_YIELD} Milk)`);
       return;
     }
 
