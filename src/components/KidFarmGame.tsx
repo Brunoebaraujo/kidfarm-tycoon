@@ -37,7 +37,8 @@ type Field = {
   crop: CropId | null;
 };
 
-type Inventory = Record<CropId, number>;
+type Inventory = Record<ProductId, number>;
+type Cow = { x: number; y: number; lastMilkedDay: number };
 
 type WorkerUi = {
   id: string;
