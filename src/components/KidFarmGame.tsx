@@ -405,6 +405,54 @@ function drawSeasonTree(ctx: CanvasRenderingContext2D, tx: number, ty: number, s
   }
 }
 
+function drawMilkingParlor(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
+  // grassy paddock
+  px(ctx, x + 2, y + 2, w - 4, h - 4, "#a9d86a");
+  // wooden fence posts + rails
+  ctx.fillStyle = COLORS.wood;
+  for (let i = 0; i <= w; i += 12) px(ctx, x + i, y, 2, h, COLORS.wood);
+  px(ctx, x, y + 4, w, 2, COLORS.woodLight);
+  px(ctx, x, y + h - 6, w, 2, COLORS.woodLight);
+  // gate
+  px(ctx, x + Math.floor(w / 2) - 6, y + h - 8, 12, 8, COLORS.woodDark);
+  // milk bucket icon corner
+  px(ctx, x + 4, y + 6, 7, 8, COLORS.stone);
+  px(ctx, x + 4, y + 6, 7, 2, COLORS.white);
+  px(ctx, x + 3, y + 5, 9, 2, COLORS.stoneDark);
+}
+
+function drawCow(ctx: CanvasRenderingContext2D, cx: number, cy: number, milked: boolean, time: number) {
+  const bob = Math.floor(time * 0.004) % 2;
+  // shadow
+  ctx.fillStyle = COLORS.shadow;
+  ctx.beginPath();
+  ctx.ellipse(cx, cy + 6, 12, 3, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // body
+  px(ctx, cx - 10, cy - 6 - bob, 20, 10, COLORS.white);
+  // spots
+  px(ctx, cx - 7, cy - 4 - bob, 4, 4, COLORS.black);
+  px(ctx, cx + 2, cy - 2 - bob, 5, 4, COLORS.black);
+  // legs
+  px(ctx, cx - 8, cy + 3, 3, 4, COLORS.white);
+  px(ctx, cx + 5, cy + 3, 3, 4, COLORS.white);
+  // head
+  px(ctx, cx - 14, cy - 4 - bob, 6, 6, COLORS.white);
+  px(ctx, cx - 15, cy - 6 - bob, 2, 2, COLORS.woodDark); // horn
+  px(ctx, cx - 9, cy - 6 - bob, 2, 2, COLORS.woodDark);
+  px(ctx, cx - 13, cy - 2 - bob, 1, 1, COLORS.black); // eye
+  // udder
+  px(ctx, cx, cy + 3, 4, 3, milked ? "#e8a8b8" : "#f7c8d4");
+  // status label
+  ctx.font = "8px 'Press Start 2P', monospace";
+  ctx.textAlign = "center";
+  const label = milked ? "Milked today" : "Cow ready";
+  px(ctx, cx - label.length * 3 - 4, cy - 22, label.length * 6 + 8, 10, COLORS.black);
+  ctx.fillStyle = milked ? "#c8c8c8" : COLORS.selected;
+  ctx.fillText(label, cx, cy - 14);
+  ctx.textAlign = "left";
+}
+
 function drawWorker(ctx: CanvasRenderingContext2D, worker: Worker, isSelected: boolean) {
   const x = worker.x | 0;
   const y = worker.y | 0;
