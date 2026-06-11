@@ -568,7 +568,12 @@ export default function KidFarmGame() {
   }
 
   function totalHarvested(inv: Inventory) {
-    return CROP_ORDER.reduce((sum, c) => sum + inv[c], 0);
+    return PRODUCT_ORDER.reduce((sum, c) => sum + inv[c], 0);
+  }
+
+  function inMilkingParlor(tx: number, ty: number) {
+    return tx >= MILKING_PARLOR.x && tx < MILKING_PARLOR.x + MILKING_PARLOR.w
+      && ty >= MILKING_PARLOR.y && ty < MILKING_PARLOR.y + MILKING_PARLOR.h;
   }
 
   const handleTileClick = useCallback((tx: number, ty: number) => {
