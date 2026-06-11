@@ -2,9 +2,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 type CropId = "wheat" | "rice" | "corn" | "banana";
+type ProductId = CropId | "milk";
 type Season = "spring" | "summer" | "autumn" | "winter";
 type FieldState = "empty" | "prepared" | "planted" | "growing1" | "growing2" | "growing3" | "ready";
-type TaskKind = "prepare" | "plant" | "harvest" | "deliver";
+type TaskKind = "prepare" | "plant" | "harvest" | "deliver" | "milk";
 type Facing = "down" | "up" | "left" | "right";
 
 type Task = {
@@ -36,7 +37,8 @@ type Field = {
   crop: CropId | null;
 };
 
-type Inventory = Record<CropId, number>;
+type Inventory = Record<ProductId, number>;
+type Cow = { x: number; y: number; lastMilkedDay: number };
 
 type WorkerUi = {
   id: string;
@@ -60,6 +62,9 @@ const COOP = { x: 17, y: 8, w: 3, h: 2 };
 const WELL = { x: 13, y: 6 };
 const TOOLSHED = { x: 2, y: 3, w: 2, h: 2 };
 const SEASON_TREE = { x: 20, y: 4 }; // landmark tree near farmhouse (east side)
+const MILKING_PARLOR = { x: 18, y: 1, w: 3, h: 3 };
+const COW_TILE = { x: 19, y: 3 };
+const SAVE_KEY = "kidfarm-save-v1";
 const DAY_MS = 90_000;
 const DAILY_COST = 8;
 const HIRE_COST_BASE = 50;
@@ -167,7 +172,28 @@ const TASK_LABELS: Record<TaskKind, string> = {
   plant: "Plant",
   harvest: "Harvest",
   deliver: "Deliver Goods",
+  milk: "Milk Cow",
 };
+
+const MILK_BASE_PRICE = 5;
+const MILK_PRICE_MOD: Record<Season, number> = { spring: 0, summer: -1, autumn: 1, winter: 2 };
+const MILK_YIELD = 2;
+
+function milkPriceFor(season: Season, fluct: number) {
+  return Math.max(1, MILK_BASE_PRICE + MILK_PRICE_MOD[season] + fluct);
+}
+
+function productPriceFor(id: ProductId, season: Season, fluct: number) {
+  if (id === "milk") return milkPriceFor(season, fluct);
+  return cropPriceFor(id, season, fluct);
+}
+
+function productName(id: ProductId) {
+  if (id === "milk") return "Milk";
+  return CROPS[id].name;
+}
+
+const PRODUCT_ORDER: ProductId[] = ["wheat", "rice", "corn", "banana", "milk"];
 
 function px(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, color: string) {
   ctx.fillStyle = color;
@@ -179,6 +205,10 @@ function clamp(value: number, min: number, max: number) {
 }
 
 function emptyInventory(): Inventory {
+  return { wheat: 0, rice: 0, corn: 0, banana: 0, milk: 0 };
+}
+
+function emptySeeds(): Record<CropId, number> {
   return { wheat: 0, rice: 0, corn: 0, banana: 0 };
 }
 
@@ -375,6 +405,54 @@ function drawSeasonTree(ctx: CanvasRenderingContext2D, tx: number, ty: number, s
   }
 }
 
+function drawMilkingParlor(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
+  // grassy paddock
+  px(ctx, x + 2, y + 2, w - 4, h - 4, "#a9d86a");
+  // wooden fence posts + rails
+  ctx.fillStyle = COLORS.wood;
+  for (let i = 0; i <= w; i += 12) px(ctx, x + i, y, 2, h, COLORS.wood);
+  px(ctx, x, y + 4, w, 2, COLORS.woodLight);
+  px(ctx, x, y + h - 6, w, 2, COLORS.woodLight);
+  // gate
+  px(ctx, x + Math.floor(w / 2) - 6, y + h - 8, 12, 8, COLORS.woodDark);
+  // milk bucket icon corner
+  px(ctx, x + 4, y + 6, 7, 8, COLORS.stone);
+  px(ctx, x + 4, y + 6, 7, 2, COLORS.white);
+  px(ctx, x + 3, y + 5, 9, 2, COLORS.stoneDark);
+}
+
+function drawCow(ctx: CanvasRenderingContext2D, cx: number, cy: number, milked: boolean, time: number) {
+  const bob = Math.floor(time * 0.004) % 2;
+  // shadow
+  ctx.fillStyle = COLORS.shadow;
+  ctx.beginPath();
+  ctx.ellipse(cx, cy + 6, 12, 3, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // body
+  px(ctx, cx - 10, cy - 6 - bob, 20, 10, COLORS.white);
+  // spots
+  px(ctx, cx - 7, cy - 4 - bob, 4, 4, COLORS.black);
+  px(ctx, cx + 2, cy - 2 - bob, 5, 4, COLORS.black);
+  // legs
+  px(ctx, cx - 8, cy + 3, 3, 4, COLORS.white);
+  px(ctx, cx + 5, cy + 3, 3, 4, COLORS.white);
+  // head
+  px(ctx, cx - 14, cy - 4 - bob, 6, 6, COLORS.white);
+  px(ctx, cx - 15, cy - 6 - bob, 2, 2, COLORS.woodDark); // horn
+  px(ctx, cx - 9, cy - 6 - bob, 2, 2, COLORS.woodDark);
+  px(ctx, cx - 13, cy - 2 - bob, 1, 1, COLORS.black); // eye
+  // udder
+  px(ctx, cx, cy + 3, 4, 3, milked ? "#e8a8b8" : "#f7c8d4");
+  // status label
+  ctx.font = "8px 'Press Start 2P', monospace";
+  ctx.textAlign = "center";
+  const label = milked ? "Milked today" : "Cow ready";
+  px(ctx, cx - label.length * 3 - 4, cy - 22, label.length * 6 + 8, 10, COLORS.black);
+  ctx.fillStyle = milked ? "#c8c8c8" : COLORS.selected;
+  ctx.fillText(label, cx, cy - 14);
+  ctx.textAlign = "left";
+}
+
 function drawWorker(ctx: CanvasRenderingContext2D, worker: Worker, isSelected: boolean) {
   const x = worker.x | 0;
   const y = worker.y | 0;
@@ -417,17 +495,18 @@ export default function KidFarmGame() {
   const nextTaskId = useRef(1);
 
   const initialSeason = seasonForDay(1);
-  const initialFluct: Record<CropId, number> = { wheat: 0, rice: 0, corn: 0, banana: 0 };
-  const initialHistory: Record<CropId, { day: number; price: number }[]> = {
+  const initialFluct: Record<ProductId, number> = { wheat: 0, rice: 0, corn: 0, banana: 0, milk: 0 };
+  const initialHistory: Record<ProductId, { day: number; price: number }[]> = {
     wheat: [{ day: 1, price: cropPriceFor("wheat", initialSeason, 0) }],
     rice: [{ day: 1, price: cropPriceFor("rice", initialSeason, 0) }],
     corn: [{ day: 1, price: cropPriceFor("corn", initialSeason, 0) }],
     banana: [{ day: 1, price: cropPriceFor("banana", initialSeason, 0) }],
+    milk: [{ day: 1, price: milkPriceFor(initialSeason, 0) }],
   };
 
-  const stateRef = useRef({
+  const initialState = () => ({
     coins: 25,
-    seeds: { wheat: 5, rice: 0, corn: 0, banana: 0 } as Inventory,
+    seeds: { ...emptySeeds(), wheat: 5 } as Record<CropId, number>,
     harvested: emptyInventory(),
     revenue: 0,
     expenses: 0,
@@ -441,6 +520,11 @@ export default function KidFarmGame() {
     fields: createFields(),
     workers: [makeWorker("maya", "Maya", 10 * TILE + TILE / 2, 4 * TILE + TILE / 2, COLORS.hairBlonde, COLORS.shirtRed)],
     selectedWorkerId: "maya",
+    cow: { x: COW_TILE.x * TILE + TILE / 2, y: COW_TILE.y * TILE + TILE / 2, lastMilkedDay: 0 } as Cow,
+  });
+
+  const stateRef = useRef({
+    ...initialState(),
     camera: { x: 0, y: 0, freeX: 0, freeY: 0 },
     cssScale: 2,
     viewportW: 800,
@@ -453,7 +537,7 @@ export default function KidFarmGame() {
 
   const [ui, setUi] = useState({
     coins: 25,
-    seeds: { wheat: 5, rice: 0, corn: 0, banana: 0 } as Inventory,
+    seeds: { ...emptySeeds(), wheat: 5 } as Record<CropId, number>,
     harvested: emptyInventory(),
     revenue: 0,
     expenses: 0,
@@ -465,7 +549,8 @@ export default function KidFarmGame() {
       rice: cropPriceFor("rice", initialSeason, 0),
       corn: cropPriceFor("corn", initialSeason, 0),
       banana: cropPriceFor("banana", initialSeason, 0),
-    } as Record<CropId, number>,
+      milk: milkPriceFor(initialSeason, 0),
+    } as Record<ProductId, number>,
     selectedWorkerId: "maya",
     selectedWorkerName: "Maya",
     selectedStatus: "Idle",
@@ -474,6 +559,7 @@ export default function KidFarmGame() {
     workers: [{ id: "maya", name: "Maya", status: "Idle", currentTask: "Idle", queueLength: 0, isSelected: true }] as WorkerUi[],
     message: "Selected Worker: Maya. Click soil to prepare it.",
     banner: { text: `${SEASON_LABEL[initialSeason]} has arrived`, visible: true },
+    cowReady: true,
   });
 
   const [plantPrompt, setPlantPrompt] = useState<{ tx: number; ty: number } | null>(null);
@@ -530,7 +616,12 @@ export default function KidFarmGame() {
   }
 
   function totalHarvested(inv: Inventory) {
-    return CROP_ORDER.reduce((sum, c) => sum + inv[c], 0);
+    return PRODUCT_ORDER.reduce((sum, c) => sum + inv[c], 0);
+  }
+
+  function inMilkingParlor(tx: number, ty: number) {
+    return tx >= MILKING_PARLOR.x && tx < MILKING_PARLOR.x + MILKING_PARLOR.w
+      && ty >= MILKING_PARLOR.y && ty < MILKING_PARLOR.y + MILKING_PARLOR.h;
   }
 
   const handleTileClick = useCallback((tx: number, ty: number) => {
@@ -543,8 +634,16 @@ export default function KidFarmGame() {
       assignTask({ kind: "deliver", tx, ty });
       return;
     }
+    if (inMilkingParlor(tx, ty)) {
+      if (s.cow.lastMilkedDay === s.day) {
+        setMessage("The cow has already been milked today.");
+        return;
+      }
+      assignTask({ kind: "milk", tx: COW_TILE.x, ty: COW_TILE.y });
+      return;
+    }
     if (!inField(tx, ty)) {
-      setMessage("Click a worker to select, then click soil tiles or the shipping bin.");
+      setMessage("Click a worker to select, then click soil tiles, the cow, or the shipping bin.");
       return;
     }
     const field = s.fields[fieldIdx(tx, ty)];
@@ -578,18 +677,30 @@ export default function KidFarmGame() {
 
     if (task.kind === "deliver") {
       let total = 0;
-      for (const id of CROP_ORDER) {
+      for (const id of PRODUCT_ORDER) {
         const qty = s.harvested[id];
         if (qty <= 0) continue;
-        const price = currentPrice(id);
+        const price = id === "milk" ? milkPriceFor(s.season, s.fluct.milk) : currentPrice(id);
         const earn = qty * price;
         total += earn;
         s.harvested[id] = 0;
-        logJournal(`Sold ${qty} ${CROPS[id].name} for ${price}c each (+${earn}c)`);
+        logJournal(`Sold ${qty} ${productName(id)} for ${price}c each (+${earn}c)`);
       }
       s.coins += total;
       s.revenue += total;
       addFloater(worker.x, worker.y - 24, `+${total}c`, "#f5c530");
+      return;
+    }
+
+    if (task.kind === "milk") {
+      if (s.cow.lastMilkedDay === s.day) {
+        setMessage("The cow has already been milked today.");
+        return;
+      }
+      s.cow.lastMilkedDay = s.day;
+      s.harvested.milk += MILK_YIELD;
+      addFloater(worker.x, worker.y - 24, `+${MILK_YIELD} Milk`, "#fdf6e3");
+      logJournal(`${worker.name} milked the cow (+${MILK_YIELD} Milk)`);
       return;
     }
 
@@ -617,6 +728,99 @@ export default function KidFarmGame() {
     }
   }
 
+  // ----- Save / Load / Reset -----
+  function serializeState() {
+    const s = stateRef.current;
+    return {
+      v: 1,
+      coins: s.coins,
+      seeds: s.seeds,
+      harvested: s.harvested,
+      revenue: s.revenue,
+      expenses: s.expenses,
+      dayMs: s.dayMs,
+      day: s.day,
+      season: s.season,
+      fluct: s.fluct,
+      history: s.history,
+      journal: s.journal,
+      fields: s.fields,
+      workers: s.workers.map((w) => ({
+        id: w.id, name: w.name, x: w.x, y: w.y, hair: w.hair, shirt: w.shirt,
+        facing: w.facing,
+        queue: w.queue,
+        task: w.task,
+      })),
+      selectedWorkerId: s.selectedWorkerId,
+      cow: s.cow,
+      nextTaskId: nextTaskId.current,
+    };
+  }
+
+  function saveGame() {
+    try { localStorage.setItem(SAVE_KEY, JSON.stringify(serializeState())); } catch { /* ignore */ }
+  }
+
+  function loadGame(): boolean {
+    try {
+      const raw = localStorage.getItem(SAVE_KEY);
+      if (!raw) return false;
+      const data = JSON.parse(raw);
+      if (!data || data.v !== 1) return false;
+      const s = stateRef.current;
+      s.coins = data.coins; s.seeds = { ...emptySeeds(), ...data.seeds };
+      s.harvested = { ...emptyInventory(), ...data.harvested };
+      s.revenue = data.revenue; s.expenses = data.expenses;
+      s.dayMs = data.dayMs; s.day = data.day; s.season = data.season;
+      s.fluct = { wheat: 0, rice: 0, corn: 0, banana: 0, milk: 0, ...data.fluct };
+      s.history = { ...s.history, ...data.history };
+      if (!s.history.milk) s.history.milk = [{ day: s.day, price: milkPriceFor(s.season, 0) }];
+      s.journal = data.journal ?? [];
+      s.fields = data.fields ?? createFields();
+      s.workers = (data.workers ?? []).map((w: { id: string; name: string; x: number; y: number; hair: string; shirt: string; facing?: Facing; queue?: Task[]; task?: Task | null }) => ({
+        id: w.id, name: w.name, x: w.x, y: w.y, hair: w.hair, shirt: w.shirt,
+        facing: (w.facing ?? "down") as Facing, queue: w.queue ?? [], task: w.task ?? null,
+        workTimer: 0, walkPhase: 0,
+      }));
+      if (s.workers.length === 0) {
+        s.workers = [makeWorker("maya", "Maya", 10 * TILE + TILE / 2, 4 * TILE + TILE / 2, COLORS.hairBlonde, COLORS.shirtRed)];
+      }
+      s.selectedWorkerId = data.selectedWorkerId ?? s.workers[0].id;
+      s.cow = data.cow ?? { x: COW_TILE.x * TILE + TILE / 2, y: COW_TILE.y * TILE + TILE / 2, lastMilkedDay: 0 };
+      nextTaskId.current = data.nextTaskId ?? 1;
+      s.seasonBanner = { text: "", age: 9999, ttl: 1 };
+      syncUi(true);
+      setUi((c) => ({ ...c, banner: { ...c.banner, visible: false } }));
+      return true;
+    } catch { return false; }
+  }
+
+  function resetGame() {
+    try { localStorage.removeItem(SAVE_KEY); } catch { /* ignore */ }
+    const init = initialState();
+    const s = stateRef.current;
+    Object.assign(s, init);
+    nextTaskId.current = 1;
+    setUi((c) => ({ ...c, message: "Game reset.", banner: { text: `${SEASON_LABEL[init.season]} has arrived`, visible: true } }));
+    syncUi(true);
+  }
+
+  useEffect(() => {
+    loadGame();
+    const interval = window.setInterval(saveGame, 10_000);
+    const onHide = () => { if (document.visibilityState === "hidden") saveGame(); };
+    const onBeforeUnload = () => saveGame();
+    document.addEventListener("visibilitychange", onHide);
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", onHide);
+      window.removeEventListener("beforeunload", onBeforeUnload);
+      saveGame();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     let raf = 0;
     const tick = (now: number) => {
@@ -633,16 +837,17 @@ export default function KidFarmGame() {
 
   function rollFluctuations() {
     const s = stateRef.current;
-    for (const id of CROP_ORDER) {
+    for (const id of PRODUCT_ORDER) {
       s.fluct[id] = Math.floor(Math.random() * 3) - 1; // -1, 0, +1
     }
   }
 
   function recordPriceHistory() {
     const s = stateRef.current;
-    for (const id of CROP_ORDER) {
+    for (const id of PRODUCT_ORDER) {
       const arr = s.history[id];
-      arr.push({ day: s.day, price: cropPriceFor(id, s.season, s.fluct[id]) });
+      const price = id === "milk" ? milkPriceFor(s.season, s.fluct.milk) : cropPriceFor(id, s.season, s.fluct[id]);
+      arr.push({ day: s.day, price });
       if (arr.length > HISTORY_DAYS) arr.splice(0, arr.length - HISTORY_DAYS);
     }
   }
@@ -762,11 +967,12 @@ export default function KidFarmGame() {
       queueLength: worker.queue.length,
       isSelected: worker.id === s.selectedWorkerId,
     }));
-    const prices: Record<CropId, number> = {
+    const prices: Record<ProductId, number> = {
       wheat: currentPrice("wheat"),
       rice: currentPrice("rice"),
       corn: currentPrice("corn"),
       banana: currentPrice("banana"),
+      milk: milkPriceFor(s.season, s.fluct.milk),
     };
 
     setUi((current) => ({
@@ -786,6 +992,7 @@ export default function KidFarmGame() {
       selectedCurrentTask: taskName(selected.task),
       selectedQueueLength: selected.queue.length,
       workers,
+      cowReady: s.cow.lastMilkedDay !== s.day,
     }));
   }
 
@@ -846,12 +1053,18 @@ export default function KidFarmGame() {
     drawWell(ctx, WELL.x * TILE, WELL.y * TILE);
     drawShippingBin(ctx, SHIPPING_BIN.x * TILE, SHIPPING_BIN.y * TILE);
 
+    // Milking Parlor + cow
+    drawMilkingParlor(ctx, MILKING_PARLOR.x * TILE, MILKING_PARLOR.y * TILE, MILKING_PARLOR.w * TILE, MILKING_PARLOR.h * TILE);
+    drawCow(ctx, s.cow.x, s.cow.y, s.cow.lastMilkedDay === s.day, now);
+
     // Season landmark tree
     drawSeasonTree(ctx, SEASON_TREE.x, SEASON_TREE.y, s.season, now);
 
     const hover = pointerToTile();
     if (hover) {
-      const valid = inField(hover.tx, hover.ty) || (hover.tx === SHIPPING_BIN.x && hover.ty === SHIPPING_BIN.y);
+      const valid = inField(hover.tx, hover.ty)
+        || (hover.tx === SHIPPING_BIN.x && hover.ty === SHIPPING_BIN.y)
+        || inMilkingParlor(hover.tx, hover.ty);
       ctx.strokeStyle = valid ? COLORS.white : "rgba(255,255,255,0.4)";
       ctx.strokeRect(hover.tx * TILE + 0.5, hover.ty * TILE + 0.5, TILE - 1, TILE - 1);
     }
@@ -1154,15 +1367,16 @@ export default function KidFarmGame() {
               <div className="pixel-panel p-3 flex flex-col gap-2" style={{ minWidth: 320, maxWidth: 480, maxHeight: "90%", overflow: "auto" }}>
                 <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 1 }}>Market · {SEASON_LABEL[ui.season]}</div>
                 <div style={{ fontSize: 8, opacity: 0.7 }}>Last {HISTORY_DAYS} days of prices.</div>
-                {CROP_ORDER.map((id) => {
+                {PRODUCT_ORDER.map((id) => {
                   const hist = stateRef.current.history[id];
+                  const color = id === "milk" ? "#fdf6e3" : CROPS[id].fruit;
                   return (
                     <div key={id} className="pixel-panel" style={{ padding: 6 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10 }}>
-                        <strong>{CROPS[id].name}</strong>
+                        <strong>{productName(id)}</strong>
                         <span>Now: {ui.prices[id]}c</span>
                       </div>
-                      <MiniChart data={hist} color={CROPS[id].fruit} />
+                      <MiniChart data={hist} color={color} />
                     </div>
                   );
                 })}
@@ -1216,9 +1430,16 @@ export default function KidFarmGame() {
             <button className="pixel-btn" onClick={() => setJournalOpen(true)}>Farm Journal</button>
           </Panel>
 
+          <Panel title="Milking Parlor">
+            <StatusLine label="Cow" value={ui.cowReady ? "Ready to milk" : "Milked today"} />
+            <div style={{ fontSize: 9, opacity: 0.7 }}>
+              Click the cow with a worker selected to queue a Milk Cow task (+{MILK_YIELD} Milk).
+            </div>
+          </Panel>
+
           <Panel title="Current Prices">
-            {CROP_ORDER.map((id) => (
-              <StatusLine key={`price-${id}`} label={CROPS[id].name} value={`${ui.prices[id]}c`} />
+            {PRODUCT_ORDER.map((id) => (
+              <StatusLine key={`price-${id}`} label={productName(id)} value={`${ui.prices[id]}c`} />
             ))}
           </Panel>
 
@@ -1228,8 +1449,8 @@ export default function KidFarmGame() {
               <StatusLine key={`seed-${id}`} label={CROPS[id].name} value={`${ui.seeds[id]}`} />
             ))}
             <div style={{ fontSize: 9, opacity: 0.7, textTransform: "uppercase", letterSpacing: 1, marginTop: 4 }}>Harvested</div>
-            {CROP_ORDER.map((id) => (
-              <StatusLine key={`harv-${id}`} label={CROPS[id].name} value={`${ui.harvested[id]}`} />
+            {PRODUCT_ORDER.map((id) => (
+              <StatusLine key={`harv-${id}`} label={productName(id)} value={`${ui.harvested[id]}`} />
             ))}
           </Panel>
 
@@ -1238,10 +1459,19 @@ export default function KidFarmGame() {
               <li>Click a worker to select them.</li>
               <li>Click empty soil to prepare it.</li>
               <li>Click prepared soil to choose a crop.</li>
+              <li>Click the cow to milk it (once per day).</li>
               <li>Click ripe crops, then the shipping bin to sell.</li>
-              <li>Watch the seasons — the tree shows you!</li>
             </ol>
             <div style={{ fontSize: 9, opacity: 0.7 }}>Drag map or use arrow keys/WASD to pan.</div>
+            <button
+              className="pixel-btn"
+              style={{ background: "var(--color-destructive)", color: "#fff" }}
+              onClick={() => {
+                if (window.confirm("Reset your farm? This deletes saved progress.")) resetGame();
+              }}
+            >
+              Reset Game
+            </button>
           </Panel>
         </aside>
       </div>
