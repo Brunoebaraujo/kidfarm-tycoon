@@ -800,11 +800,12 @@ export default function KidFarmGame() {
       queueLength: worker.queue.length,
       isSelected: worker.id === s.selectedWorkerId,
     }));
-    const prices: Record<CropId, number> = {
+    const prices: Record<ProductId, number> = {
       wheat: currentPrice("wheat"),
       rice: currentPrice("rice"),
       corn: currentPrice("corn"),
       banana: currentPrice("banana"),
+      milk: milkPriceFor(s.season, s.fluct.milk),
     };
 
     setUi((current) => ({
@@ -824,6 +825,7 @@ export default function KidFarmGame() {
       selectedCurrentTask: taskName(selected.task),
       selectedQueueLength: selected.queue.length,
       workers,
+      cowReady: s.cow.lastMilkedDay !== s.day,
     }));
   }
 
