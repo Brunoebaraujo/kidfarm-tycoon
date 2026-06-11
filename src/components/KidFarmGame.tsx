@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 type CropId = "wheat" | "rice" | "corn" | "banana";
+type Season = "spring" | "summer" | "autumn" | "winter";
 type FieldState = "empty" | "prepared" | "planted" | "growing1" | "growing2" | "growing3" | "ready";
 type TaskKind = "prepare" | "plant" | "harvest" | "deliver";
 type Facing = "down" | "up" | "left" | "right";
@@ -31,6 +32,7 @@ type Worker = {
 type Field = {
   state: FieldState;
   growth: number;
+  growMs: number;
   crop: CropId | null;
 };
 
@@ -45,6 +47,8 @@ type WorkerUi = {
   isSelected: boolean;
 };
 
+type JournalEntry = { day: number; season: Season; text: string };
+
 const TILE = 32;
 const MAP_W = 22;
 const MAP_H = 16;
@@ -55,38 +59,64 @@ const BARN = { x: 14, y: 8, w: 3, h: 3 };
 const COOP = { x: 17, y: 8, w: 3, h: 2 };
 const WELL = { x: 13, y: 6 };
 const TOOLSHED = { x: 2, y: 3, w: 2, h: 2 };
+const SEASON_TREE = { x: 20, y: 4 }; // landmark tree near farmhouse (east side)
 const DAY_MS = 90_000;
 const DAILY_COST = 8;
 const HIRE_COST_BASE = 50;
 const WORK_MS = 850;
+const SEASON_DAYS = 10;
+const HISTORY_DAYS = 30;
+const JOURNAL_MAX = 100;
 
 type CropDef = {
   id: CropId;
   name: string;
   seedCost: number;
-  growDays: number;
   yield: number;
-  price: number;
+  basePrice: number;
   stalk: string;
   leaf: string;
   fruit: string;
 };
 
 const CROPS: Record<CropId, CropDef> = {
-  wheat: { id: "wheat", name: "Wheat", seedCost: 2, growDays: 1, yield: 4, price: 3, stalk: "#e3b94a", leaf: "#7ec84a", fruit: "#fcdc70" },
-  rice: { id: "rice", name: "Rice", seedCost: 4, growDays: 2, yield: 5, price: 4, stalk: "#cfe07a", leaf: "#9ee062", fruit: "#f4f1c1" },
-  corn: { id: "corn", name: "Corn", seedCost: 8, growDays: 4, yield: 6, price: 7, stalk: "#3aa860", leaf: "#2a7a2a", fruit: "#f5c530" },
-  banana: { id: "banana", name: "Banana", seedCost: 15, growDays: 7, yield: 8, price: 12, stalk: "#7a4a25", leaf: "#3fa83f", fruit: "#f7d94a" },
+  wheat: { id: "wheat", name: "Wheat", seedCost: 2, yield: 4, basePrice: 3, stalk: "#e3b94a", leaf: "#7ec84a", fruit: "#fcdc70" },
+  rice: { id: "rice", name: "Rice", seedCost: 4, yield: 5, basePrice: 4, stalk: "#cfe07a", leaf: "#9ee062", fruit: "#f4f1c1" },
+  corn: { id: "corn", name: "Corn", seedCost: 8, yield: 6, basePrice: 7, stalk: "#3aa860", leaf: "#2a7a2a", fruit: "#f5c530" },
+  banana: { id: "banana", name: "Banana", seedCost: 15, yield: 8, basePrice: 12, stalk: "#7a4a25", leaf: "#3fa83f", fruit: "#f7d94a" },
 };
 
 const CROP_ORDER: CropId[] = ["wheat", "rice", "corn", "banana"];
+const SEASON_ORDER: Season[] = ["spring", "summer", "autumn", "winter"];
+const SEASON_LABEL: Record<Season, string> = { spring: "Spring", summer: "Summer", autumn: "Autumn", winter: "Winter" };
 
-function cropGrowMs(crop: CropId) {
-  return CROPS[crop].growDays * DAY_MS;
+// Growth days by crop x season
+const GROW_DAYS: Record<CropId, Record<Season, number>> = {
+  wheat: { spring: 1, summer: 1, autumn: 2, winter: 3 },
+  rice: { spring: 2, summer: 1, autumn: 2, winter: 4 },
+  corn: { spring: 3, summer: 2, autumn: 4, winter: 6 },
+  banana: { spring: 5, summer: 4, autumn: 6, winter: 8 },
+};
+
+// Seasonal price modifiers (added to base)
+const PRICE_MOD: Record<CropId, Record<Season, number>> = {
+  wheat: { spring: 0, summer: -1, autumn: 1, winter: 3 },
+  rice: { spring: 2, summer: 1, autumn: 0, winter: -1 },
+  corn: { spring: 0, summer: 2, autumn: 1, winter: -2 },
+  banana: { spring: -1, summer: 3, autumn: 2, winter: 0 },
+};
+
+function seasonForDay(day: number): Season {
+  const idx = Math.floor((day - 1) / SEASON_DAYS) % SEASON_ORDER.length;
+  return SEASON_ORDER[(idx + SEASON_ORDER.length) % SEASON_ORDER.length];
 }
 
-function cropProfit(crop: CropDef) {
-  return crop.yield * crop.price - crop.seedCost;
+function cropPriceFor(crop: CropId, season: Season, fluct: number) {
+  return Math.max(1, CROPS[crop].basePrice + PRICE_MOD[crop][season] + fluct);
+}
+
+function cropGrowMs(crop: CropId, season: Season) {
+  return GROW_DAYS[crop][season] * DAY_MS;
 }
 
 const COLORS = {
@@ -125,6 +155,13 @@ const COLORS = {
   selected: "#fff06a",
 };
 
+const SEASON_TINT: Record<Season, string> = {
+  spring: "#9ee062",
+  summer: "#3aa860",
+  autumn: "#e08a3a",
+  winter: "#cfe9f5",
+};
+
 const TASK_LABELS: Record<TaskKind, string> = {
   prepare: "Prepare Soil",
   plant: "Plant",
@@ -148,23 +185,11 @@ function emptyInventory(): Inventory {
 function createFields(): Field[] {
   const w = FIELD_AREA.x1 - FIELD_AREA.x0 + 1;
   const h = FIELD_AREA.y1 - FIELD_AREA.y0 + 1;
-  return Array.from({ length: w * h }, () => ({ state: "empty" as FieldState, growth: 0, crop: null }));
+  return Array.from({ length: w * h }, () => ({ state: "empty" as FieldState, growth: 0, growMs: 0, crop: null }));
 }
 
 function makeWorker(id: string, name: string, x: number, y: number, hair: string, shirt: string): Worker {
-  return {
-    id,
-    name,
-    x,
-    y,
-    task: null,
-    queue: [],
-    facing: "down",
-    workTimer: 0,
-    walkPhase: 0,
-    hair,
-    shirt,
-  };
+  return { id, name, x, y, task: null, queue: [], facing: "down", workTimer: 0, walkPhase: 0, hair, shirt };
 }
 
 function workerStatus(worker: Worker) {
@@ -179,13 +204,16 @@ function taskName(task: Task | null) {
   return TASK_LABELS[task.kind];
 }
 
-function drawGrassTile(ctx: CanvasRenderingContext2D, x: number, y: number, seed: number) {
-  px(ctx, x, y, TILE, TILE, COLORS.grass);
+function drawGrassTile(ctx: CanvasRenderingContext2D, x: number, y: number, seed: number, season: Season) {
+  const base = season === "winter" ? "#cfe1ea" : season === "autumn" ? "#a8b85a" : COLORS.grass;
+  const dark = season === "winter" ? "#9fb8c4" : season === "autumn" ? "#7a8a3a" : COLORS.grassDark;
+  const light = season === "winter" ? "#e6f0f5" : season === "autumn" ? "#c8d070" : COLORS.grassLight;
+  px(ctx, x, y, TILE, TILE, base);
   const a = (seed * 9301 + 49297) % 233280;
   const r1 = (a >> 2) % TILE;
   const r2 = (a >> 5) % TILE;
-  px(ctx, x + r1, y + r2, 2, 2, COLORS.grassDark);
-  px(ctx, x + ((r1 + 11) % TILE), y + ((r2 + 7) % TILE), 2, 1, COLORS.grassLight);
+  px(ctx, x + r1, y + r2, 2, 2, dark);
+  px(ctx, x + ((r1 + 11) % TILE), y + ((r2 + 7) % TILE), 2, 1, light);
 }
 
 function drawSoilTile(ctx: CanvasRenderingContext2D, x: number, y: number, prepared: boolean) {
@@ -216,7 +244,6 @@ function drawCrop(ctx: CanvasRenderingContext2D, x: number, y: number, state: Fi
   const ready = state === "ready";
 
   if (crop === "banana") {
-    // single tree
     px(ctx, x + TILE / 2 - 1, y + 28 - h, 2, h, def.stalk);
     const crown = Math.max(2, Math.floor(h / 2));
     px(ctx, x + TILE / 2 - crown, y + 28 - h - 3, crown * 2, 3, def.leaf);
@@ -233,7 +260,6 @@ function drawCrop(ctx: CanvasRenderingContext2D, x: number, y: number, state: Fi
       if (ready) px(ctx, sx, y + 22 - h, 2, 5, def.fruit);
     }
   } else {
-    // wheat / rice — short stalks
     for (let i = 0; i < 4; i += 1) {
       const sx = x + 6 + i * 6;
       px(ctx, sx, y + 26 - h, 1, h, ready ? def.stalk : def.leaf);
@@ -265,6 +291,88 @@ function drawWell(ctx: CanvasRenderingContext2D, x: number, y: number) {
   px(ctx, x + 7, y + 2, 2, 14, COLORS.wood);
   px(ctx, x + TILE - 9, y + 2, 2, 14, COLORS.wood);
   px(ctx, x + 4, y + 2, TILE - 8, 5, COLORS.roof);
+}
+
+// Big landmark tree — drawn spanning 2 tiles wide x 3 tiles tall,
+// anchored so trunk base sits on (tx, ty+2).
+function drawSeasonTree(ctx: CanvasRenderingContext2D, tx: number, ty: number, season: Season, time: number) {
+  const baseX = tx * TILE + TILE; // center of 2-tile wide
+  const baseY = (ty + 2) * TILE + TILE - 2; // ground line
+  // shadow
+  ctx.fillStyle = COLORS.shadow;
+  ctx.beginPath();
+  ctx.ellipse(baseX, baseY + 2, 22, 5, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // trunk
+  const trunkH = 28;
+  const trunkW = 8;
+  px(ctx, baseX - trunkW / 2, baseY - trunkH, trunkW, trunkH, COLORS.wood);
+  px(ctx, baseX - trunkW / 2, baseY - trunkH, 2, trunkH, COLORS.woodDark);
+  px(ctx, baseX + 1, baseY - 18, 2, 4, COLORS.woodDark);
+
+  const canopyCY = baseY - trunkH - 14;
+  const canopyR = 26;
+
+  if (season === "winter") {
+    // bare branches
+    ctx.strokeStyle = COLORS.woodDark;
+    ctx.lineWidth = 2;
+    for (const ang of [-1.1, -0.6, -0.1, 0.4, 0.9, 1.3]) {
+      ctx.beginPath();
+      ctx.moveTo(baseX, baseY - trunkH + 4);
+      ctx.lineTo(baseX + Math.cos(ang) * 22, canopyCY + Math.sin(ang) * 12);
+      ctx.stroke();
+    }
+    // few residual leaves + snow caps
+    px(ctx, baseX - 14, canopyCY - 4, 3, 3, "#7a4a2a");
+    px(ctx, baseX + 10, canopyCY + 2, 3, 3, "#7a4a2a");
+    // snow on ground around trunk
+    px(ctx, baseX - 18, baseY - 2, 36, 3, "#f4fbff");
+    // snow flecks
+    for (let i = 0; i < 5; i += 1) {
+      px(ctx, baseX - 18 + i * 8, canopyCY - 10 + ((i * 5) % 14), 2, 2, "#ffffff");
+    }
+  } else {
+    // canopy color per season
+    let leaf = "#3aa860";
+    let leafDark = COLORS.leafDark;
+    let leafLight = "#9ee062";
+    if (season === "spring") { leaf = "#7fd86a"; leafDark = "#3a9a3a"; leafLight = "#c6f06a"; }
+    if (season === "summer") { leaf = "#2f9a48"; leafDark = "#1c6a2c"; leafLight = "#62c46a"; }
+    if (season === "autumn") { leaf = "#e08a3a"; leafDark = "#a04a18"; leafLight = "#f5c43a"; }
+
+    // main canopy — soft pixel blobs
+    const sway = Math.sin(time * 0.0015) * 1.2;
+    const drawBlob = (cx: number, cy: number, r: number, c: string) => {
+      for (let dy = -r; dy <= r; dy += 2) {
+        const w = Math.floor(Math.sqrt(Math.max(0, r * r - dy * dy))) * 2;
+        px(ctx, cx - w / 2, cy + dy, w, 2, c);
+      }
+    };
+    drawBlob(baseX + sway, canopyCY, canopyR, leafDark);
+    drawBlob(baseX - 10 + sway, canopyCY - 4, 16, leaf);
+    drawBlob(baseX + 10 + sway, canopyCY + 2, 18, leaf);
+    drawBlob(baseX + sway, canopyCY - 10, 14, leafLight);
+
+    if (season === "spring") {
+      // pink flowers
+      for (const [dx, dy] of [[-12, -4], [-2, 6], [10, -2], [16, 6], [-18, 4], [4, -10]]) {
+        px(ctx, baseX + dx, canopyCY + dy, 3, 3, "#f7a8c8");
+        px(ctx, baseX + dx + 1, canopyCY + dy + 1, 1, 1, "#fcdc70");
+      }
+    }
+    if (season === "autumn") {
+      // red accent leaves + falling
+      for (const [dx, dy] of [[-14, 2], [12, -6], [-4, 10], [18, 0]]) {
+        px(ctx, baseX + dx, canopyCY + dy, 3, 3, "#c83a2a");
+      }
+      const fall = (time * 0.04) % 40;
+      px(ctx, baseX - 16, baseY - 30 - fall + 40, 2, 2, "#e08a3a");
+      px(ctx, baseX + 14, baseY - 20 - ((fall + 20) % 40) + 40, 2, 2, "#c83a2a");
+      px(ctx, baseX - 4, baseY - 10 - ((fall + 10) % 40) + 40, 2, 2, "#f5c43a");
+    }
+  }
 }
 
 function drawWorker(ctx: CanvasRenderingContext2D, worker: Worker, isSelected: boolean) {
@@ -308,6 +416,15 @@ export default function KidFarmGame() {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const nextTaskId = useRef(1);
 
+  const initialSeason = seasonForDay(1);
+  const initialFluct: Record<CropId, number> = { wheat: 0, rice: 0, corn: 0, banana: 0 };
+  const initialHistory: Record<CropId, { day: number; price: number }[]> = {
+    wheat: [{ day: 1, price: cropPriceFor("wheat", initialSeason, 0) }],
+    rice: [{ day: 1, price: cropPriceFor("rice", initialSeason, 0) }],
+    corn: [{ day: 1, price: cropPriceFor("corn", initialSeason, 0) }],
+    banana: [{ day: 1, price: cropPriceFor("banana", initialSeason, 0) }],
+  };
+
   const stateRef = useRef({
     coins: 25,
     seeds: { wheat: 5, rice: 0, corn: 0, banana: 0 } as Inventory,
@@ -316,6 +433,11 @@ export default function KidFarmGame() {
     expenses: 0,
     dayMs: 0,
     day: 1,
+    season: initialSeason,
+    fluct: { ...initialFluct },
+    history: initialHistory,
+    journal: [{ day: 1, season: initialSeason, text: `${SEASON_LABEL[initialSeason]} has arrived` }] as JournalEntry[],
+    seasonBanner: { text: `${SEASON_LABEL[initialSeason]} has arrived`, age: 0, ttl: 3500 },
     fields: createFields(),
     workers: [makeWorker("maya", "Maya", 10 * TILE + TILE / 2, 4 * TILE + TILE / 2, COLORS.hairBlonde, COLORS.shirtRed)],
     selectedWorkerId: "maya",
@@ -337,6 +459,13 @@ export default function KidFarmGame() {
     expenses: 0,
     day: 1,
     time: "06:00",
+    season: initialSeason as Season,
+    prices: {
+      wheat: cropPriceFor("wheat", initialSeason, 0),
+      rice: cropPriceFor("rice", initialSeason, 0),
+      corn: cropPriceFor("corn", initialSeason, 0),
+      banana: cropPriceFor("banana", initialSeason, 0),
+    } as Record<CropId, number>,
     selectedWorkerId: "maya",
     selectedWorkerName: "Maya",
     selectedStatus: "Idle",
@@ -344,19 +473,20 @@ export default function KidFarmGame() {
     selectedQueueLength: 0,
     workers: [{ id: "maya", name: "Maya", status: "Idle", currentTask: "Idle", queueLength: 0, isSelected: true }] as WorkerUi[],
     message: "Selected Worker: Maya. Click soil to prepare it.",
+    banner: { text: `${SEASON_LABEL[initialSeason]} has arrived`, visible: true },
   });
 
   const [plantPrompt, setPlantPrompt] = useState<{ tx: number; ty: number } | null>(null);
   const [shopOpen, setShopOpen] = useState(false);
+  const [marketOpen, setMarketOpen] = useState(false);
+  const [journalOpen, setJournalOpen] = useState(false);
 
   function inField(tx: number, ty: number) {
     return tx >= FIELD_AREA.x0 && tx <= FIELD_AREA.x1 && ty >= FIELD_AREA.y0 && ty <= FIELD_AREA.y1;
   }
-
   function fieldIdx(tx: number, ty: number) {
     return (ty - FIELD_AREA.y0) * (FIELD_AREA.x1 - FIELD_AREA.x0 + 1) + (tx - FIELD_AREA.x0);
   }
-
   function selectedWorker() {
     const s = stateRef.current;
     return s.workers.find((worker) => worker.id === s.selectedWorkerId) ?? s.workers[0];
@@ -368,6 +498,17 @@ export default function KidFarmGame() {
 
   function addFloater(x: number, y: number, text: string, color: string) {
     stateRef.current.floaters.push({ x, y, text, color, age: 0 });
+  }
+
+  function logJournal(text: string) {
+    const s = stateRef.current;
+    s.journal.unshift({ day: s.day, season: s.season, text });
+    if (s.journal.length > JOURNAL_MAX) s.journal.length = JOURNAL_MAX;
+  }
+
+  function currentPrice(crop: CropId) {
+    const s = stateRef.current;
+    return cropPriceFor(crop, s.season, s.fluct[crop]);
   }
 
   function selectWorker(workerId: string) {
@@ -402,12 +543,10 @@ export default function KidFarmGame() {
       assignTask({ kind: "deliver", tx, ty });
       return;
     }
-
     if (!inField(tx, ty)) {
       setMessage("Click a worker to select, then click soil tiles or the shipping bin.");
       return;
     }
-
     const field = s.fields[fieldIdx(tx, ty)];
     if (field.state === "empty") {
       assignTask({ kind: "prepare", tx, ty });
@@ -442,9 +581,11 @@ export default function KidFarmGame() {
       for (const id of CROP_ORDER) {
         const qty = s.harvested[id];
         if (qty <= 0) continue;
-        const earn = qty * CROPS[id].price;
+        const price = currentPrice(id);
+        const earn = qty * price;
         total += earn;
         s.harvested[id] = 0;
+        logJournal(`Sold ${qty} ${CROPS[id].name} for ${price}c each (+${earn}c)`);
       }
       s.coins += total;
       s.revenue += total;
@@ -460,13 +601,18 @@ export default function KidFarmGame() {
       field.state = "planted";
       field.growth = 0;
       field.crop = task.crop;
+      // Lock growth duration based on CURRENT season at plant time.
+      field.growMs = cropGrowMs(task.crop, s.season);
       s.seeds[task.crop] -= 1;
+      logJournal(`Planted ${CROPS[task.crop].name} (${GROW_DAYS[task.crop][s.season]}d)`);
     } else if (task.kind === "harvest" && field.state === "ready" && field.crop) {
       const def = CROPS[field.crop];
       s.harvested[field.crop] += def.yield;
       addFloater(worker.x, worker.y - 24, `+${def.yield} ${def.name}`, def.fruit);
+      logJournal(`Harvested ${def.yield} ${def.name}`);
       field.state = "empty";
       field.growth = 0;
+      field.growMs = 0;
       field.crop = null;
     }
   }
@@ -478,12 +624,28 @@ export default function KidFarmGame() {
       const dt = Math.min(50, now - s.lastTime);
       s.lastTime = now;
       update(dt);
-      draw();
+      draw(now);
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, []);
+
+  function rollFluctuations() {
+    const s = stateRef.current;
+    for (const id of CROP_ORDER) {
+      s.fluct[id] = Math.floor(Math.random() * 3) - 1; // -1, 0, +1
+    }
+  }
+
+  function recordPriceHistory() {
+    const s = stateRef.current;
+    for (const id of CROP_ORDER) {
+      const arr = s.history[id];
+      arr.push({ day: s.day, price: cropPriceFor(id, s.season, s.fluct[id]) });
+      if (arr.length > HISTORY_DAYS) arr.splice(0, arr.length - HISTORY_DAYS);
+    }
+  }
 
   function update(dt: number) {
     const s = stateRef.current;
@@ -494,13 +656,32 @@ export default function KidFarmGame() {
       s.coins -= DAILY_COST;
       s.expenses += DAILY_COST;
       addFloater(SHIPPING_BIN.x * TILE + TILE / 2, SHIPPING_BIN.y * TILE - 10, `-${DAILY_COST}c daily`, COLORS.shirtRed);
+
+      const newSeason = seasonForDay(s.day);
+      if (newSeason !== s.season) {
+        s.season = newSeason;
+        const text = `${SEASON_LABEL[newSeason]} has arrived`;
+        s.seasonBanner = { text, age: 0, ttl: 3500 };
+        logJournal(text);
+        setUi((c) => ({ ...c, banner: { text, visible: true } }));
+      }
+
+      rollFluctuations();
+      recordPriceHistory();
+    }
+
+    if (s.seasonBanner) {
+      s.seasonBanner.age += dt;
+      if (s.seasonBanner.age >= s.seasonBanner.ttl && ui.banner.visible) {
+        setUi((c) => (c.banner.visible ? { ...c, banner: { ...c.banner, visible: false } } : c));
+      }
     }
 
     for (const field of s.fields) {
       if (!field.crop) continue;
       if (["planted", "growing1", "growing2", "growing3"].includes(field.state)) {
         field.growth += dt;
-        const total = cropGrowMs(field.crop);
+        const total = field.growMs || cropGrowMs(field.crop, s.season);
         const step = total / 4;
         if (field.growth >= step * 4) field.state = "ready";
         else if (field.growth >= step * 3) field.state = "growing3";
@@ -514,7 +695,6 @@ export default function KidFarmGame() {
         worker.task = worker.queue.shift() ?? null;
       }
       if (!worker.task) continue;
-
       const targetX = worker.task.tx * TILE + TILE / 2;
       const targetY = worker.task.ty * TILE + TILE / 2;
       const dx = targetX - worker.x;
@@ -582,6 +762,12 @@ export default function KidFarmGame() {
       queueLength: worker.queue.length,
       isSelected: worker.id === s.selectedWorkerId,
     }));
+    const prices: Record<CropId, number> = {
+      wheat: currentPrice("wheat"),
+      rice: currentPrice("rice"),
+      corn: currentPrice("corn"),
+      banana: currentPrice("banana"),
+    };
 
     setUi((current) => ({
       ...current,
@@ -592,6 +778,8 @@ export default function KidFarmGame() {
       expenses: s.expenses,
       day: s.day,
       time: `${hh}:${mm}`,
+      season: s.season,
+      prices,
       selectedWorkerId: selected.id,
       selectedWorkerName: selected.name,
       selectedStatus: workerStatus(selected),
@@ -601,7 +789,7 @@ export default function KidFarmGame() {
     }));
   }
 
-  function draw() {
+  function draw(now: number) {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const s = stateRef.current;
@@ -615,13 +803,13 @@ export default function KidFarmGame() {
       canvas.height = viewH;
     }
     ctx.imageSmoothingEnabled = false;
-    px(ctx, 0, 0, viewW, viewH, COLORS.sky);
+    px(ctx, 0, 0, viewW, viewH, s.season === "winter" ? "#c8e2f0" : COLORS.sky);
     ctx.save();
     ctx.translate(-Math.round(s.camera.x), -Math.round(s.camera.y));
 
     for (let y = 0; y < MAP_H; y += 1) {
       for (let x = 0; x < MAP_W; x += 1) {
-        drawGrassTile(ctx, x * TILE, y * TILE, x * 31 + y * 17);
+        drawGrassTile(ctx, x * TILE, y * TILE, x * 31 + y * 17, s.season);
       }
     }
 
@@ -637,7 +825,7 @@ export default function KidFarmGame() {
         const x = tx * TILE;
         const y = ty * TILE;
         if (field.state === "empty") {
-          drawGrassTile(ctx, x, y, tx * 11 + ty * 7);
+          drawGrassTile(ctx, x, y, tx * 11 + ty * 7, s.season);
           px(ctx, x + 4, y + 4, TILE - 8, TILE - 8, "rgba(90,58,32,0.18)");
         } else if (field.state === "prepared" || !field.crop) {
           drawSoilTile(ctx, x, y, true);
@@ -657,6 +845,9 @@ export default function KidFarmGame() {
     drawRectBuilding(ctx, TOOLSHED.x * TILE, TOOLSHED.y * TILE, TOOLSHED.w * TILE, TOOLSHED.h * TILE, COLORS.wood, COLORS.stoneDark);
     drawWell(ctx, WELL.x * TILE, WELL.y * TILE);
     drawShippingBin(ctx, SHIPPING_BIN.x * TILE, SHIPPING_BIN.y * TILE);
+
+    // Season landmark tree
+    drawSeasonTree(ctx, SEASON_TREE.x, SEASON_TREE.y, s.season, now);
 
     const hover = pointerToTile();
     if (hover) {
@@ -717,12 +908,8 @@ export default function KidFarmGame() {
   function pointerWorld() {
     const s = stateRef.current;
     if (s.pointer.x < 0 || s.pointer.y < 0) return null;
-    return {
-      x: s.pointer.x / s.cssScale + s.camera.x,
-      y: s.pointer.y / s.cssScale + s.camera.y,
-    };
+    return { x: s.pointer.x / s.cssScale + s.camera.x, y: s.pointer.y / s.cssScale + s.camera.y };
   }
-
   function pointerToTile() {
     const world = pointerWorld();
     if (!world) return null;
@@ -731,7 +918,6 @@ export default function KidFarmGame() {
     if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) return null;
     return { tx, ty };
   }
-
   function workerAtPointer() {
     const world = pointerWorld();
     if (!world) return null;
@@ -758,27 +944,22 @@ export default function KidFarmGame() {
     const s = stateRef.current;
     const canvas = canvasRef.current;
     if (!canvas) return undefined;
-
     const getPos = (event: PointerEvent) => {
       const rect = canvas.getBoundingClientRect();
       return { x: event.clientX - rect.left, y: event.clientY - rect.top };
     };
     const onDown = (event: PointerEvent) => {
       const { x, y } = getPos(event);
-      s.pointer.x = x;
-      s.pointer.y = y;
+      s.pointer.x = x; s.pointer.y = y;
       s.pointer.downAt = performance.now();
       s.pointer.dragging = false;
-      s.pointer.startX = x;
-      s.pointer.startY = y;
-      s.pointer.startCamX = s.camera.x;
-      s.pointer.startCamY = s.camera.y;
+      s.pointer.startX = x; s.pointer.startY = y;
+      s.pointer.startCamX = s.camera.x; s.pointer.startCamY = s.camera.y;
       (event.target as Element).setPointerCapture?.(event.pointerId);
     };
     const onMove = (event: PointerEvent) => {
       const { x, y } = getPos(event);
-      s.pointer.x = x;
-      s.pointer.y = y;
+      s.pointer.x = x; s.pointer.y = y;
       if (s.pointer.downAt) {
         const dx = x - s.pointer.startX;
         const dy = y - s.pointer.startY;
@@ -796,17 +977,11 @@ export default function KidFarmGame() {
       s.pointer.dragging = false;
       if (wasDragging) return;
       const worker = workerAtPointer();
-      if (worker) {
-        selectWorker(worker.id);
-        return;
-      }
+      if (worker) { selectWorker(worker.id); return; }
       const tile = pointerToTile();
       if (tile) handleTileClick(tile.tx, tile.ty);
     };
-    const onLeave = () => {
-      s.pointer.x = -1;
-      s.pointer.y = -1;
-    };
+    const onLeave = () => { s.pointer.x = -1; s.pointer.y = -1; };
     const onKey = (event: KeyboardEvent) => s.keys.add(event.key);
     const onKeyUp = (event: KeyboardEvent) => s.keys.delete(event.key);
 
@@ -845,10 +1020,7 @@ export default function KidFarmGame() {
   const hireWorker = () => {
     const s = stateRef.current;
     const cost = HIRE_COST_BASE * s.workers.length;
-    if (s.coins < cost) {
-      setMessage(`Hiring costs ${cost} coins. Earn more first.`);
-      return;
-    }
+    if (s.coins < cost) { setMessage(`Hiring costs ${cost} coins. Earn more first.`); return; }
     s.coins -= cost;
     s.expenses += cost;
     const index = s.workers.length;
@@ -877,6 +1049,7 @@ export default function KidFarmGame() {
   };
 
   const dayPct = Math.min(100, Math.floor((stateRef.current.dayMs / DAY_MS) * 100));
+  const seasonIcon: Record<Season, string> = { spring: "🌸", summer: "☀️", autumn: "🍂", winter: "❄️" };
 
   return (
     <div className="min-h-screen w-full flex flex-col" style={{ background: "linear-gradient(180deg, #a9d8ef 0%, #7ec84a 60%)" }}>
@@ -892,6 +1065,7 @@ export default function KidFarmGame() {
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <Chip label="Day" value={`${ui.day}`} swatch="#a9d8ef" />
+          <Chip label="Season" value={`${seasonIcon[ui.season]} ${SEASON_LABEL[ui.season]}`} swatch={SEASON_TINT[ui.season]} />
           <Chip label="Time" value={ui.time} swatch="#fcdc70" />
           <Chip label="Selected" value={ui.selectedWorkerName} swatch="#fff06a" />
         </div>
@@ -907,27 +1081,31 @@ export default function KidFarmGame() {
             {ui.message}
           </div>
 
+          {ui.banner.visible && (
+            <div className="absolute left-1/2 top-6 -translate-x-1/2 pixel-panel animate-fade-in" style={{ padding: "8px 14px", fontSize: 12, background: SEASON_TINT[ui.season] }}>
+              {seasonIcon[ui.season]} {ui.banner.text}
+            </div>
+          )}
+
           {plantPrompt && (
             <div className="absolute inset-0 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.45)" }}>
-              <div className="pixel-panel p-3 flex flex-col gap-2" style={{ minWidth: 260, maxWidth: 360 }}>
-                <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 1 }}>Plant What?</div>
+              <div className="pixel-panel p-3 flex flex-col gap-2" style={{ minWidth: 280, maxWidth: 380 }}>
+                <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 1 }}>
+                  Plant What? · {SEASON_LABEL[ui.season]}
+                </div>
                 {CROP_ORDER.map((id) => {
                   const def = CROPS[id];
                   const owned = ui.seeds[id];
+                  const days = GROW_DAYS[id][ui.season];
+                  const price = ui.prices[id];
                   return (
-                    <button
-                      key={id}
-                      className="pixel-btn"
-                      disabled={owned <= 0}
-                      onClick={() => choosePlant(id)}
-                      style={{ textAlign: "left" }}
-                    >
+                    <button key={id} className="pixel-btn" disabled={owned <= 0} onClick={() => choosePlant(id)} style={{ textAlign: "left" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
                         <span>{def.name}</span>
                         <span>Seeds: {owned}</span>
                       </div>
-                      <div style={{ fontSize: 8, opacity: 0.75, marginTop: 2 }}>
-                        {def.growDays}d · sells {def.price}c · yield {def.yield}
+                      <div style={{ fontSize: 8, opacity: 0.8, marginTop: 2 }}>
+                        {days}d in {SEASON_LABEL[ui.season]} · sells {price}c · yield {def.yield}
                       </div>
                     </button>
                   );
@@ -939,12 +1117,14 @@ export default function KidFarmGame() {
 
           {shopOpen && (
             <div className="absolute inset-0 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.45)" }}>
-              <div className="pixel-panel p-3 flex flex-col gap-2" style={{ minWidth: 280, maxWidth: 420 }}>
+              <div className="pixel-panel p-3 flex flex-col gap-2" style={{ minWidth: 280, maxWidth: 440 }}>
                 <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 1 }}>Farm Supply Store</div>
-                <div style={{ fontSize: 8, opacity: 0.7 }}>Cost · Time · Sell · Profit</div>
+                <div style={{ fontSize: 8, opacity: 0.7 }}>Cost · Grow ({SEASON_LABEL[ui.season]}) · Sell now · Yield</div>
                 {CROP_ORDER.map((id) => {
                   const def = CROPS[id];
-                  const profit = cropProfit(def);
+                  const days = GROW_DAYS[id][ui.season];
+                  const price = ui.prices[id];
+                  const projected = def.yield * price - def.seedCost;
                   return (
                     <div key={id} className="pixel-panel" style={{ padding: 6, display: "flex", flexDirection: "column", gap: 4 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10 }}>
@@ -953,9 +1133,9 @@ export default function KidFarmGame() {
                       </div>
                       <div style={{ fontSize: 9, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2 }}>
                         <span>Cost: {def.seedCost}c</span>
-                        <span>Time: {def.growDays}d</span>
-                        <span>Sell: {def.price}c</span>
-                        <span style={{ color: profit > 0 ? "#2a7a2a" : "#c84a3a" }}>Profit: {profit}c</span>
+                        <span>Grow: {days}d</span>
+                        <span>Sell: {price}c</span>
+                        <span style={{ color: projected > 0 ? "#2a7a2a" : "#c84a3a" }}>If sold now: {projected}c</span>
                       </div>
                       <div style={{ display: "flex", gap: 4 }}>
                         <button className="pixel-btn" style={{ flex: 1 }} onClick={() => buySeeds(id, 1)}>Buy 1 · {def.seedCost}c</button>
@@ -965,6 +1145,46 @@ export default function KidFarmGame() {
                   );
                 })}
                 <button className="pixel-btn primary" onClick={() => setShopOpen(false)}>Close Shop</button>
+              </div>
+            </div>
+          )}
+
+          {marketOpen && (
+            <div className="absolute inset-0 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.45)" }}>
+              <div className="pixel-panel p-3 flex flex-col gap-2" style={{ minWidth: 320, maxWidth: 480, maxHeight: "90%", overflow: "auto" }}>
+                <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 1 }}>Market · {SEASON_LABEL[ui.season]}</div>
+                <div style={{ fontSize: 8, opacity: 0.7 }}>Last {HISTORY_DAYS} days of prices.</div>
+                {CROP_ORDER.map((id) => {
+                  const hist = stateRef.current.history[id];
+                  return (
+                    <div key={id} className="pixel-panel" style={{ padding: 6 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10 }}>
+                        <strong>{CROPS[id].name}</strong>
+                        <span>Now: {ui.prices[id]}c</span>
+                      </div>
+                      <MiniChart data={hist} color={CROPS[id].fruit} />
+                    </div>
+                  );
+                })}
+                <button className="pixel-btn primary" onClick={() => setMarketOpen(false)}>Close</button>
+              </div>
+            </div>
+          )}
+
+          {journalOpen && (
+            <div className="absolute inset-0 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.45)" }}>
+              <div className="pixel-panel p-3 flex flex-col gap-2" style={{ minWidth: 320, maxWidth: 480, maxHeight: "90%" }}>
+                <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 1 }}>Farm Journal</div>
+                <div style={{ fontSize: 8, opacity: 0.7 }}>Latest {JOURNAL_MAX} events.</div>
+                <div style={{ overflow: "auto", maxHeight: 360, display: "flex", flexDirection: "column", gap: 2 }}>
+                  {stateRef.current.journal.length === 0 && <div style={{ fontSize: 9 }}>No events yet.</div>}
+                  {stateRef.current.journal.map((e, i) => (
+                    <div key={i} style={{ fontSize: 9, padding: "3px 4px", borderBottom: "1px dashed rgba(0,0,0,0.15)" }}>
+                      <strong>Day {e.day}</strong> <span style={{ opacity: 0.6 }}>({SEASON_LABEL[e.season]})</span> — {e.text}
+                    </div>
+                  ))}
+                </div>
+                <button className="pixel-btn primary" onClick={() => setJournalOpen(false)}>Close</button>
               </div>
             </div>
           )}
@@ -990,9 +1210,16 @@ export default function KidFarmGame() {
             <button className="pixel-btn primary" onClick={hireWorker}>Hire Worker - {HIRE_COST_BASE * ui.workers.length}c</button>
           </Panel>
 
-          <Panel title="Shop">
-            <button className="pixel-btn primary" onClick={() => setShopOpen(true)}>Open Farm Supply Store</button>
-            <div style={{ fontSize: 8, opacity: 0.7 }}>Compare seeds: cost, time & profit.</div>
+          <Panel title="Shops & Logs">
+            <button className="pixel-btn primary" onClick={() => setShopOpen(true)}>Farm Supply Store</button>
+            <button className="pixel-btn accent" onClick={() => setMarketOpen(true)}>Market & Prices</button>
+            <button className="pixel-btn" onClick={() => setJournalOpen(true)}>Farm Journal</button>
+          </Panel>
+
+          <Panel title="Current Prices">
+            {CROP_ORDER.map((id) => (
+              <StatusLine key={`price-${id}`} label={CROPS[id].name} value={`${ui.prices[id]}c`} />
+            ))}
           </Panel>
 
           <Panel title="Inventory">
@@ -1012,10 +1239,38 @@ export default function KidFarmGame() {
               <li>Click empty soil to prepare it.</li>
               <li>Click prepared soil to choose a crop.</li>
               <li>Click ripe crops, then the shipping bin to sell.</li>
+              <li>Watch the seasons — the tree shows you!</li>
             </ol>
             <div style={{ fontSize: 9, opacity: 0.7 }}>Drag map or use arrow keys/WASD to pan.</div>
           </Panel>
         </aside>
+      </div>
+    </div>
+  );
+}
+
+function MiniChart({ data, color }: { data: { day: number; price: number }[]; color: string }) {
+  const w = 280;
+  const h = 60;
+  if (data.length === 0) return <div style={{ fontSize: 9 }}>No data</div>;
+  const prices = data.map((d) => d.price);
+  const min = Math.min(...prices);
+  const max = Math.max(...prices);
+  const range = Math.max(1, max - min);
+  const step = data.length > 1 ? w / (data.length - 1) : 0;
+  const points = data.map((d, i) => `${i * step},${h - ((d.price - min) / range) * (h - 8) - 4}`).join(" ");
+  return (
+    <div style={{ marginTop: 4 }}>
+      <svg width={w} height={h} style={{ background: "rgba(0,0,0,0.06)", border: "1px solid var(--color-border)", display: "block", maxWidth: "100%" }}>
+        <polyline points={points} fill="none" stroke={color} strokeWidth={2} />
+        {data.map((d, i) => (
+          <circle key={i} cx={i * step} cy={h - ((d.price - min) / range) * (h - 8) - 4} r={1.5} fill={color} />
+        ))}
+      </svg>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 8, opacity: 0.7 }}>
+        <span>Day {data[0].day}</span>
+        <span>Min {min}c · Max {max}c</span>
+        <span>Day {data[data.length - 1].day}</span>
       </div>
     </div>
   );
