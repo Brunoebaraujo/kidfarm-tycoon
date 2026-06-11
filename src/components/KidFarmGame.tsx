@@ -696,16 +696,17 @@ export default function KidFarmGame() {
 
   function rollFluctuations() {
     const s = stateRef.current;
-    for (const id of CROP_ORDER) {
+    for (const id of PRODUCT_ORDER) {
       s.fluct[id] = Math.floor(Math.random() * 3) - 1; // -1, 0, +1
     }
   }
 
   function recordPriceHistory() {
     const s = stateRef.current;
-    for (const id of CROP_ORDER) {
+    for (const id of PRODUCT_ORDER) {
       const arr = s.history[id];
-      arr.push({ day: s.day, price: cropPriceFor(id, s.season, s.fluct[id]) });
+      const price = id === "milk" ? milkPriceFor(s.season, s.fluct.milk) : cropPriceFor(id, s.season, s.fluct[id]);
+      arr.push({ day: s.day, price });
       if (arr.length > HISTORY_DAYS) arr.splice(0, arr.length - HISTORY_DAYS);
     }
   }
