@@ -172,7 +172,28 @@ const TASK_LABELS: Record<TaskKind, string> = {
   plant: "Plant",
   harvest: "Harvest",
   deliver: "Deliver Goods",
+  milk: "Milk Cow",
 };
+
+const MILK_BASE_PRICE = 5;
+const MILK_PRICE_MOD: Record<Season, number> = { spring: 0, summer: -1, autumn: 1, winter: 2 };
+const MILK_YIELD = 2;
+
+function milkPriceFor(season: Season, fluct: number) {
+  return Math.max(1, MILK_BASE_PRICE + MILK_PRICE_MOD[season] + fluct);
+}
+
+function productPriceFor(id: ProductId, season: Season, fluct: number) {
+  if (id === "milk") return milkPriceFor(season, fluct);
+  return cropPriceFor(id, season, fluct);
+}
+
+function productName(id: ProductId) {
+  if (id === "milk") return "Milk";
+  return CROPS[id].name;
+}
+
+const PRODUCT_ORDER: ProductId[] = ["wheat", "rice", "corn", "banana", "milk"];
 
 function px(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, color: string) {
   ctx.fillStyle = color;
@@ -184,6 +205,10 @@ function clamp(value: number, min: number, max: number) {
 }
 
 function emptyInventory(): Inventory {
+  return { wheat: 0, rice: 0, corn: 0, banana: 0, milk: 0 };
+}
+
+function emptySeeds(): Record<CropId, number> {
   return { wheat: 0, rice: 0, corn: 0, banana: 0 };
 }
 
