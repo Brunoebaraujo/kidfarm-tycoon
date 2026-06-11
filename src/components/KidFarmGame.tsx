@@ -728,6 +728,99 @@ export default function KidFarmGame() {
     }
   }
 
+  // ----- Save / Load / Reset -----
+  function serializeState() {
+    const s = stateRef.current;
+    return {
+      v: 1,
+      coins: s.coins,
+      seeds: s.seeds,
+      harvested: s.harvested,
+      revenue: s.revenue,
+      expenses: s.expenses,
+      dayMs: s.dayMs,
+      day: s.day,
+      season: s.season,
+      fluct: s.fluct,
+      history: s.history,
+      journal: s.journal,
+      fields: s.fields,
+      workers: s.workers.map((w) => ({
+        id: w.id, name: w.name, x: w.x, y: w.y, hair: w.hair, shirt: w.shirt,
+        facing: w.facing,
+        queue: w.queue,
+        task: w.task,
+      })),
+      selectedWorkerId: s.selectedWorkerId,
+      cow: s.cow,
+      nextTaskId: nextTaskId.current,
+    };
+  }
+
+  function saveGame() {
+    try { localStorage.setItem(SAVE_KEY, JSON.stringify(serializeState())); } catch { /* ignore */ }
+  }
+
+  function loadGame(): boolean {
+    try {
+      const raw = localStorage.getItem(SAVE_KEY);
+      if (!raw) return false;
+      const data = JSON.parse(raw);
+      if (!data || data.v !== 1) return false;
+      const s = stateRef.current;
+      s.coins = data.coins; s.seeds = { ...emptySeeds(), ...data.seeds };
+      s.harvested = { ...emptyInventory(), ...data.harvested };
+      s.revenue = data.revenue; s.expenses = data.expenses;
+      s.dayMs = data.dayMs; s.day = data.day; s.season = data.season;
+      s.fluct = { wheat: 0, rice: 0, corn: 0, banana: 0, milk: 0, ...data.fluct };
+      s.history = { ...s.history, ...data.history };
+      if (!s.history.milk) s.history.milk = [{ day: s.day, price: milkPriceFor(s.season, 0) }];
+      s.journal = data.journal ?? [];
+      s.fields = data.fields ?? createFields();
+      s.workers = (data.workers ?? []).map((w: { id: string; name: string; x: number; y: number; hair: string; shirt: string; facing?: Facing; queue?: Task[]; task?: Task | null }) => ({
+        id: w.id, name: w.name, x: w.x, y: w.y, hair: w.hair, shirt: w.shirt,
+        facing: (w.facing ?? "down") as Facing, queue: w.queue ?? [], task: w.task ?? null,
+        workTimer: 0, walkPhase: 0,
+      }));
+      if (s.workers.length === 0) {
+        s.workers = [makeWorker("maya", "Maya", 10 * TILE + TILE / 2, 4 * TILE + TILE / 2, COLORS.hairBlonde, COLORS.shirtRed)];
+      }
+      s.selectedWorkerId = data.selectedWorkerId ?? s.workers[0].id;
+      s.cow = data.cow ?? { x: COW_TILE.x * TILE + TILE / 2, y: COW_TILE.y * TILE + TILE / 2, lastMilkedDay: 0 };
+      nextTaskId.current = data.nextTaskId ?? 1;
+      s.seasonBanner = { text: "", age: 9999, ttl: 1 };
+      syncUi(true);
+      setUi((c) => ({ ...c, banner: { ...c.banner, visible: false } }));
+      return true;
+    } catch { return false; }
+  }
+
+  function resetGame() {
+    try { localStorage.removeItem(SAVE_KEY); } catch { /* ignore */ }
+    const init = initialState();
+    const s = stateRef.current;
+    Object.assign(s, init);
+    nextTaskId.current = 1;
+    setUi((c) => ({ ...c, message: "Game reset.", banner: { text: `${SEASON_LABEL[init.season]} has arrived`, visible: true } }));
+    syncUi(true);
+  }
+
+  useEffect(() => {
+    loadGame();
+    const interval = window.setInterval(saveGame, 10_000);
+    const onHide = () => { if (document.visibilityState === "hidden") saveGame(); };
+    const onBeforeUnload = () => saveGame();
+    document.addEventListener("visibilitychange", onHide);
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", onHide);
+      window.removeEventListener("beforeunload", onBeforeUnload);
+      saveGame();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     let raf = 0;
     const tick = (now: number) => {
