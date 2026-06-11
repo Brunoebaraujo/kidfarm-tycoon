@@ -2,9 +2,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 type CropId = "wheat" | "rice" | "corn" | "banana";
+type ProductId = CropId | "milk";
 type Season = "spring" | "summer" | "autumn" | "winter";
 type FieldState = "empty" | "prepared" | "planted" | "growing1" | "growing2" | "growing3" | "ready";
-type TaskKind = "prepare" | "plant" | "harvest" | "deliver";
+type TaskKind = "prepare" | "plant" | "harvest" | "deliver" | "milk";
 type Facing = "down" | "up" | "left" | "right";
 
 type Task = {
