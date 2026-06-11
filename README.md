@@ -1,8 +1,6 @@
-# Capitalism 4 Kids
+# KidFarm Tycoon
 
-A Vite, React, TypeScript, and Phaser pixel-art farming game foundation.
-
-React owns the HUD and interface panels. Phaser owns the entire farm world: tiles, sprites, movement, fields, animations, and interactions.
+A cozy pixel-art farming and entrepreneurship game for kids. The app uses React, TanStack Router, Vite, and a custom canvas-rendered farm world.
 
 ## Run Locally
 
@@ -17,36 +15,31 @@ npm run dev
 npm run build
 ```
 
-## Current Foundation
+## Worker Command System
 
-- Phaser renders the farm inside React.
-- The Phaser instance is stored in a React ref and is not recreated by HUD rerenders.
-- The farm world is composed from 32x32 tile textures generated with Phaser graphics.
-- Maya is a placeholder pixel sprite with animation states.
-- Maya moves tile-by-tile with keyboard controls.
-- Field 1 starts unlocked and cycles Harvested -> Prepared -> Planted -> Harvested.
-- Field 2 starts locked and remains unavailable.
-- Maya is selected by default, and clicking a worker changes the active worker.
-- Each worker owns an independent task queue.
-- Tile and HUD commands are assigned only to the selected worker.
-- The camera stays free during task assignment; Find buttons center once without locking.
-- Inventory and economy state are reflected in the React HUD.
+- Maya is selected by default.
+- Clicking a worker selects that worker.
+- Tile and shipping-bin commands are assigned only to the selected worker.
+- Each worker has an independent task queue.
+- Busy selected workers keep receiving queued commands.
+- Idle workers that are not selected do not receive tasks automatically.
+- The camera stays free while tasks run.
+- Find buttons center the camera on a worker once without locking follow mode.
 
 ## Controls
 
-- Click Maya or Worker 1: select the active worker.
-- Click a field: assign the field action to the selected worker.
-- Arrow keys or WASD: move the selected idle worker one tile at a time.
-- Space: perform the context field action for the selected worker.
-- 1: Queue Prepare Soil for the selected worker.
-- 2: Queue Plant Wheat for the selected worker.
-- 3: Queue Harvest Wheat for the selected worker.
-- 4: Queue Milk Cow for the selected worker.
-- Find: center the camera on that worker once.
+- Click Maya or a hired worker: select the active worker.
+- Click empty soil: queue Prepare Soil for the selected worker.
+- Click prepared soil: queue Plant Wheat for the selected worker.
+- Click ready wheat: queue Harvest Wheat for the selected worker.
+- Click the shipping bin: queue Deliver Wheat for the selected worker.
+- Drag the map, arrow keys, or WASD: pan the camera freely.
+- Find: center on a worker once.
 
-## Docs
+## Gameplay
 
-- `docs/vision.md`
-- `docs/art-direction.md`
-- `docs/technical-architecture.md`
-- `docs/roadmap.md`
+- Buy seeds from the shop.
+- Plant and grow wheat during active play time.
+- Harvest wheat and deliver it to the shipping bin to earn coins.
+- Hire workers as the farm earns money.
+- Daily household costs are charged as in-game days pass.
