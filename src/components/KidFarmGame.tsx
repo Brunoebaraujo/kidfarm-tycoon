@@ -586,8 +586,16 @@ export default function KidFarmGame() {
       assignTask({ kind: "deliver", tx, ty });
       return;
     }
+    if (inMilkingParlor(tx, ty)) {
+      if (s.cow.lastMilkedDay === s.day) {
+        setMessage("The cow has already been milked today.");
+        return;
+      }
+      assignTask({ kind: "milk", tx: COW_TILE.x, ty: COW_TILE.y });
+      return;
+    }
     if (!inField(tx, ty)) {
-      setMessage("Click a worker to select, then click soil tiles or the shipping bin.");
+      setMessage("Click a worker to select, then click soil tiles, the cow, or the shipping bin.");
       return;
     }
     const field = s.fields[fieldIdx(tx, ty)];
