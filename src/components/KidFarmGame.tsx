@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
+type CropId = "wheat" | "rice" | "corn" | "banana";
 type FieldState = "empty" | "prepared" | "planted" | "growing1" | "growing2" | "growing3" | "ready";
 type TaskKind = "prepare" | "plant" | "harvest" | "deliver";
 type Facing = "down" | "up" | "left" | "right";
@@ -10,6 +11,7 @@ type Task = {
   kind: TaskKind;
   tx: number;
   ty: number;
+  crop?: CropId;
 };
 
 type Worker = {
@@ -29,7 +31,10 @@ type Worker = {
 type Field = {
   state: FieldState;
   growth: number;
+  crop: CropId | null;
 };
+
+type Inventory = Record<CropId, number>;
 
 type WorkerUi = {
   id: string;
@@ -50,11 +55,39 @@ const BARN = { x: 14, y: 8, w: 3, h: 3 };
 const COOP = { x: 17, y: 8, w: 3, h: 2 };
 const WELL = { x: 13, y: 6 };
 const TOOLSHED = { x: 2, y: 3, w: 2, h: 2 };
-const WHEAT = { seedCost: 2, yield: 4, price: 3, growMs: 18_000 };
 const DAY_MS = 90_000;
 const DAILY_COST = 8;
 const HIRE_COST_BASE = 50;
 const WORK_MS = 850;
+
+type CropDef = {
+  id: CropId;
+  name: string;
+  seedCost: number;
+  growDays: number;
+  yield: number;
+  price: number;
+  stalk: string;
+  leaf: string;
+  fruit: string;
+};
+
+const CROPS: Record<CropId, CropDef> = {
+  wheat: { id: "wheat", name: "Wheat", seedCost: 2, growDays: 1, yield: 4, price: 3, stalk: "#e3b94a", leaf: "#7ec84a", fruit: "#fcdc70" },
+  rice: { id: "rice", name: "Rice", seedCost: 4, growDays: 2, yield: 5, price: 4, stalk: "#cfe07a", leaf: "#9ee062", fruit: "#f4f1c1" },
+  corn: { id: "corn", name: "Corn", seedCost: 8, growDays: 4, yield: 6, price: 7, stalk: "#3aa860", leaf: "#2a7a2a", fruit: "#f5c530" },
+  banana: { id: "banana", name: "Banana", seedCost: 15, growDays: 7, yield: 8, price: 12, stalk: "#7a4a25", leaf: "#3fa83f", fruit: "#f7d94a" },
+};
+
+const CROP_ORDER: CropId[] = ["wheat", "rice", "corn", "banana"];
+
+function cropGrowMs(crop: CropId) {
+  return CROPS[crop].growDays * DAY_MS;
+}
+
+function cropProfit(crop: CropDef) {
+  return crop.yield * crop.price - crop.seedCost;
+}
 
 const COLORS = {
   sky: "#a9d8ef",
@@ -76,9 +109,6 @@ const COLORS = {
   stoneDark: "#5a5a62",
   water: "#4a8cd6",
   waterLight: "#7ab8f0",
-  wheatStalk: "#e3b94a",
-  wheatLight: "#fcdc70",
-  leaf: "#3fa83f",
   leafDark: "#2a7a2a",
   skin: "#f6c79a",
   hairBlonde: "#f0d36a",
@@ -97,9 +127,9 @@ const COLORS = {
 
 const TASK_LABELS: Record<TaskKind, string> = {
   prepare: "Prepare Soil",
-  plant: "Plant Wheat",
-  harvest: "Harvest Wheat",
-  deliver: "Deliver Wheat",
+  plant: "Plant",
+  harvest: "Harvest",
+  deliver: "Deliver Goods",
 };
 
 function px(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, color: string) {
@@ -111,10 +141,14 @@ function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
 
+function emptyInventory(): Inventory {
+  return { wheat: 0, rice: 0, corn: 0, banana: 0 };
+}
+
 function createFields(): Field[] {
   const w = FIELD_AREA.x1 - FIELD_AREA.x0 + 1;
   const h = FIELD_AREA.y1 - FIELD_AREA.y0 + 1;
-  return Array.from({ length: w * h }, () => ({ state: "empty" as FieldState, growth: 0 }));
+  return Array.from({ length: w * h }, () => ({ state: "empty" as FieldState, growth: 0, crop: null }));
 }
 
 function makeWorker(id: string, name: string, x: number, y: number, hair: string, shirt: string): Worker {
@@ -139,7 +173,10 @@ function workerStatus(worker: Worker) {
 }
 
 function taskName(task: Task | null) {
-  return task ? TASK_LABELS[task.kind] : "Idle";
+  if (!task) return "Idle";
+  if (task.kind === "plant" && task.crop) return `Plant ${CROPS[task.crop].name}`;
+  if (task.kind === "harvest" && task.crop) return `Harvest ${CROPS[task.crop].name}`;
+  return TASK_LABELS[task.kind];
 }
 
 function drawGrassTile(ctx: CanvasRenderingContext2D, x: number, y: number, seed: number) {
@@ -161,22 +198,47 @@ function drawSoilTile(ctx: CanvasRenderingContext2D, x: number, y: number, prepa
   px(ctx, x, y + TILE - 1, TILE, 1, COLORS.black);
 }
 
-function drawWheat(ctx: CanvasRenderingContext2D, x: number, y: number, state: FieldState) {
+function stageHeight(state: FieldState) {
+  switch (state) {
+    case "planted": return 3;
+    case "growing1": return 8;
+    case "growing2": return 13;
+    case "growing3": return 18;
+    case "ready": return 22;
+    default: return 0;
+  }
+}
+
+function drawCrop(ctx: CanvasRenderingContext2D, x: number, y: number, state: FieldState, crop: CropId) {
   drawSoilTile(ctx, x, y, true);
-  const heights: Record<FieldState, number> = {
-    empty: 0,
-    prepared: 0,
-    planted: 3,
-    growing1: 7,
-    growing2: 12,
-    growing3: 17,
-    ready: 20,
-  };
-  const height = heights[state];
-  for (let i = 0; i < 4; i += 1) {
-    const sx = x + 6 + i * 6;
-    px(ctx, sx, y + 24 - height, 1, height, state === "ready" || state === "growing3" ? COLORS.wheatStalk : COLORS.leafDark);
-    px(ctx, sx - 2, y + 23 - height, 5, state === "ready" ? 6 : 3, state === "ready" ? COLORS.wheatLight : COLORS.leaf);
+  const def = CROPS[crop];
+  const h = stageHeight(state);
+  const ready = state === "ready";
+
+  if (crop === "banana") {
+    // single tree
+    px(ctx, x + TILE / 2 - 1, y + 28 - h, 2, h, def.stalk);
+    const crown = Math.max(2, Math.floor(h / 2));
+    px(ctx, x + TILE / 2 - crown, y + 28 - h - 3, crown * 2, 3, def.leaf);
+    px(ctx, x + TILE / 2 - crown - 2, y + 28 - h - 1, crown * 2 + 4, 2, def.leaf);
+    if (ready) {
+      px(ctx, x + TILE / 2 - 4, y + 28 - h + 2, 3, 5, def.fruit);
+      px(ctx, x + TILE / 2 + 1, y + 28 - h + 2, 3, 5, def.fruit);
+    }
+  } else if (crop === "corn") {
+    for (let i = 0; i < 3; i += 1) {
+      const sx = x + 8 + i * 8;
+      px(ctx, sx, y + 28 - h, 2, h, def.stalk);
+      px(ctx, sx - 3, y + 26 - h, 8, 3, def.leaf);
+      if (ready) px(ctx, sx, y + 22 - h, 2, 5, def.fruit);
+    }
+  } else {
+    // wheat / rice — short stalks
+    for (let i = 0; i < 4; i += 1) {
+      const sx = x + 6 + i * 6;
+      px(ctx, sx, y + 26 - h, 1, h, ready ? def.stalk : def.leaf);
+      px(ctx, sx - 2, y + 25 - h, 5, ready ? 6 : 3, ready ? def.fruit : def.leaf);
+    }
   }
 }
 
@@ -248,8 +310,8 @@ export default function KidFarmGame() {
 
   const stateRef = useRef({
     coins: 25,
-    seeds: 5,
-    harvested: 0,
+    seeds: { wheat: 5, rice: 0, corn: 0, banana: 0 } as Inventory,
+    harvested: emptyInventory(),
     revenue: 0,
     expenses: 0,
     dayMs: 0,
@@ -269,8 +331,8 @@ export default function KidFarmGame() {
 
   const [ui, setUi] = useState({
     coins: 25,
-    seeds: 5,
-    harvested: 0,
+    seeds: { wheat: 5, rice: 0, corn: 0, banana: 0 } as Inventory,
+    harvested: emptyInventory(),
     revenue: 0,
     expenses: 0,
     day: 1,
@@ -283,6 +345,9 @@ export default function KidFarmGame() {
     workers: [{ id: "maya", name: "Maya", status: "Idle", currentTask: "Idle", queueLength: 0, isSelected: true }] as WorkerUi[],
     message: "Selected Worker: Maya. Click soil to prepare it.",
   });
+
+  const [plantPrompt, setPlantPrompt] = useState<{ tx: number; ty: number } | null>(null);
+  const [shopOpen, setShopOpen] = useState(false);
 
   function inField(tx: number, ty: number) {
     return tx >= FIELD_AREA.x0 && tx <= FIELD_AREA.x1 && ty >= FIELD_AREA.y0 && ty <= FIELD_AREA.y1;
@@ -319,15 +384,19 @@ export default function KidFarmGame() {
     const command = { ...task, id: nextTaskId.current };
     nextTaskId.current += 1;
     worker.queue.push(command);
-    setMessage(`${TASK_LABELS[task.kind]} queued for ${worker.name}.`);
+    setMessage(`${taskName(command as Task)} queued for ${worker.name}.`);
     syncUi(true);
+  }
+
+  function totalHarvested(inv: Inventory) {
+    return CROP_ORDER.reduce((sum, c) => sum + inv[c], 0);
   }
 
   const handleTileClick = useCallback((tx: number, ty: number) => {
     const s = stateRef.current;
     if (tx === SHIPPING_BIN.x && ty === SHIPPING_BIN.y) {
-      if (s.harvested <= 0) {
-        setMessage("No harvested wheat to ship.");
+      if (totalHarvested(s.harvested) <= 0) {
+        setMessage("No harvested goods to ship.");
         return;
       }
       assignTask({ kind: "deliver", tx, ty });
@@ -343,17 +412,25 @@ export default function KidFarmGame() {
     if (field.state === "empty") {
       assignTask({ kind: "prepare", tx, ty });
     } else if (field.state === "prepared") {
-      if (s.seeds <= 0) {
-        setMessage("Out of seeds. Buy more seeds first.");
-        return;
-      }
-      assignTask({ kind: "plant", tx, ty });
-    } else if (field.state === "ready") {
-      assignTask({ kind: "harvest", tx, ty });
+      setPlantPrompt({ tx, ty });
+    } else if (field.state === "ready" && field.crop) {
+      assignTask({ kind: "harvest", tx, ty, crop: field.crop });
     } else {
       setMessage("This crop is still growing.");
     }
   }, [setMessage]);
+
+  function choosePlant(crop: CropId) {
+    const prompt = plantPrompt;
+    setPlantPrompt(null);
+    if (!prompt) return;
+    const s = stateRef.current;
+    if (s.seeds[crop] <= 0) {
+      setMessage(`Not enough seeds. Buy ${CROPS[crop].name} seeds first.`);
+      return;
+    }
+    assignTask({ kind: "plant", tx: prompt.tx, ty: prompt.ty, crop });
+  }
 
   function completeTask(worker: Worker) {
     const s = stateRef.current;
@@ -361,12 +438,17 @@ export default function KidFarmGame() {
     if (!task) return;
 
     if (task.kind === "deliver") {
-      const amount = s.harvested;
-      const revenue = amount * WHEAT.price;
-      s.coins += revenue;
-      s.revenue += revenue;
-      s.harvested = 0;
-      addFloater(worker.x, worker.y - 24, `+${revenue}c`, "#f5c530");
+      let total = 0;
+      for (const id of CROP_ORDER) {
+        const qty = s.harvested[id];
+        if (qty <= 0) continue;
+        const earn = qty * CROPS[id].price;
+        total += earn;
+        s.harvested[id] = 0;
+      }
+      s.coins += total;
+      s.revenue += total;
+      addFloater(worker.x, worker.y - 24, `+${total}c`, "#f5c530");
       return;
     }
 
@@ -374,15 +456,18 @@ export default function KidFarmGame() {
     const field = s.fields[fieldIdx(task.tx, task.ty)];
     if (task.kind === "prepare" && field.state === "empty") {
       field.state = "prepared";
-    } else if (task.kind === "plant" && field.state === "prepared" && s.seeds > 0) {
+    } else if (task.kind === "plant" && field.state === "prepared" && task.crop && s.seeds[task.crop] > 0) {
       field.state = "planted";
       field.growth = 0;
-      s.seeds -= 1;
-    } else if (task.kind === "harvest" && field.state === "ready") {
+      field.crop = task.crop;
+      s.seeds[task.crop] -= 1;
+    } else if (task.kind === "harvest" && field.state === "ready" && field.crop) {
+      const def = CROPS[field.crop];
+      s.harvested[field.crop] += def.yield;
+      addFloater(worker.x, worker.y - 24, `+${def.yield} ${def.name}`, def.fruit);
       field.state = "empty";
       field.growth = 0;
-      s.harvested += WHEAT.yield;
-      addFloater(worker.x, worker.y - 24, `+${WHEAT.yield} wheat`, "#fcdc70");
+      field.crop = null;
     }
   }
 
@@ -412,9 +497,11 @@ export default function KidFarmGame() {
     }
 
     for (const field of s.fields) {
+      if (!field.crop) continue;
       if (["planted", "growing1", "growing2", "growing3"].includes(field.state)) {
         field.growth += dt;
-        const step = WHEAT.growMs / 4;
+        const total = cropGrowMs(field.crop);
+        const step = total / 4;
         if (field.growth >= step * 4) field.state = "ready";
         else if (field.growth >= step * 3) field.state = "growing3";
         else if (field.growth >= step * 2) field.state = "growing2";
@@ -499,8 +586,8 @@ export default function KidFarmGame() {
     setUi((current) => ({
       ...current,
       coins: s.coins,
-      seeds: s.seeds,
-      harvested: s.harvested,
+      seeds: { ...s.seeds },
+      harvested: { ...s.harvested },
       revenue: s.revenue,
       expenses: s.expenses,
       day: s.day,
@@ -552,10 +639,10 @@ export default function KidFarmGame() {
         if (field.state === "empty") {
           drawGrassTile(ctx, x, y, tx * 11 + ty * 7);
           px(ctx, x + 4, y + 4, TILE - 8, TILE - 8, "rgba(90,58,32,0.18)");
-        } else if (field.state === "prepared") {
+        } else if (field.state === "prepared" || !field.crop) {
           drawSoilTile(ctx, x, y, true);
         } else {
-          drawWheat(ctx, x, y, field.state);
+          drawCrop(ctx, x, y, field.state, field.crop);
         }
       }
     }
@@ -739,18 +826,19 @@ export default function KidFarmGame() {
     };
   }, [handleTileClick]);
 
-  const buySeeds = (count: number) => {
+  const buySeeds = (crop: CropId, count: number) => {
     const s = stateRef.current;
-    const cost = count * WHEAT.seedCost;
+    const def = CROPS[crop];
+    const cost = count * def.seedCost;
     if (s.coins < cost) {
-      setMessage(`Need ${cost} coins for ${count} seeds.`);
+      setMessage(`Need ${cost} coins for ${count} ${def.name} seeds.`);
       return;
     }
     s.coins -= cost;
-    s.seeds += count;
+    s.seeds[crop] += count;
     s.expenses += cost;
     addFloater(FARMHOUSE.x * TILE, FARMHOUSE.y * TILE + 10, `-${cost}c`, COLORS.shirtRed);
-    setMessage(`Bought ${count} seeds.`);
+    setMessage(`Bought ${count} ${def.name} seeds.`);
     syncUi(true);
   };
 
@@ -798,8 +886,6 @@ export default function KidFarmGame() {
             KidFarm
           </h1>
           <Chip label="Coins" value={`${ui.coins}c`} swatch="#f5c530" />
-          <Chip label="Seeds" value={`${ui.seeds}`} swatch="#e3b94a" />
-          <Chip label="Wheat" value={`${ui.harvested}`} swatch="#fcdc70" />
           <Chip label="Revenue" value={`${ui.revenue}c`} swatch="#3aa860" />
           <Chip label="Expenses" value={`${ui.expenses}c`} swatch="#c84a3a" />
           <Chip label="Profit" value={`${ui.revenue - ui.expenses}c`} swatch={ui.revenue - ui.expenses >= 0 ? "#3aa860" : "#c84a3a"} />
@@ -820,9 +906,71 @@ export default function KidFarmGame() {
           <div className="absolute left-2 top-2 max-w-[80%] pixel-panel" style={{ padding: "6px 8px", fontSize: 10 }}>
             {ui.message}
           </div>
+
+          {plantPrompt && (
+            <div className="absolute inset-0 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.45)" }}>
+              <div className="pixel-panel p-3 flex flex-col gap-2" style={{ minWidth: 260, maxWidth: 360 }}>
+                <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 1 }}>Plant What?</div>
+                {CROP_ORDER.map((id) => {
+                  const def = CROPS[id];
+                  const owned = ui.seeds[id];
+                  return (
+                    <button
+                      key={id}
+                      className="pixel-btn"
+                      disabled={owned <= 0}
+                      onClick={() => choosePlant(id)}
+                      style={{ textAlign: "left" }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                        <span>{def.name}</span>
+                        <span>Seeds: {owned}</span>
+                      </div>
+                      <div style={{ fontSize: 8, opacity: 0.75, marginTop: 2 }}>
+                        {def.growDays}d · sells {def.price}c · yield {def.yield}
+                      </div>
+                    </button>
+                  );
+                })}
+                <button className="pixel-btn" onClick={() => setPlantPrompt(null)}>Cancel</button>
+              </div>
+            </div>
+          )}
+
+          {shopOpen && (
+            <div className="absolute inset-0 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.45)" }}>
+              <div className="pixel-panel p-3 flex flex-col gap-2" style={{ minWidth: 280, maxWidth: 420 }}>
+                <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 1 }}>Farm Supply Store</div>
+                <div style={{ fontSize: 8, opacity: 0.7 }}>Cost · Time · Sell · Profit</div>
+                {CROP_ORDER.map((id) => {
+                  const def = CROPS[id];
+                  const profit = cropProfit(def);
+                  return (
+                    <div key={id} className="pixel-panel" style={{ padding: 6, display: "flex", flexDirection: "column", gap: 4 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10 }}>
+                        <strong>{def.name}</strong>
+                        <span>Own: {ui.seeds[id]}</span>
+                      </div>
+                      <div style={{ fontSize: 9, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2 }}>
+                        <span>Cost: {def.seedCost}c</span>
+                        <span>Time: {def.growDays}d</span>
+                        <span>Sell: {def.price}c</span>
+                        <span style={{ color: profit > 0 ? "#2a7a2a" : "#c84a3a" }}>Profit: {profit}c</span>
+                      </div>
+                      <div style={{ display: "flex", gap: 4 }}>
+                        <button className="pixel-btn" style={{ flex: 1 }} onClick={() => buySeeds(id, 1)}>Buy 1 · {def.seedCost}c</button>
+                        <button className="pixel-btn" style={{ flex: 1 }} onClick={() => buySeeds(id, 5)}>Buy 5 · {def.seedCost * 5}c</button>
+                      </div>
+                    </div>
+                  );
+                })}
+                <button className="pixel-btn primary" onClick={() => setShopOpen(false)}>Close Shop</button>
+              </div>
+            </div>
+          )}
         </div>
 
-        <aside className="lg:w-[300px] flex flex-col gap-2">
+        <aside className="lg:w-[320px] flex flex-col gap-2">
           <Panel title="Selected Worker">
             <StatusLine label="Name" value={ui.selectedWorkerName} />
             <StatusLine label="Status" value={ui.selectedStatus} />
@@ -843,18 +991,29 @@ export default function KidFarmGame() {
           </Panel>
 
           <Panel title="Shop">
-            <button className="pixel-btn" onClick={() => buySeeds(1)}>Buy 1 Seed - 2c</button>
-            <button className="pixel-btn" onClick={() => buySeeds(5)}>Buy 5 Seeds - 10c</button>
+            <button className="pixel-btn primary" onClick={() => setShopOpen(true)}>Open Farm Supply Store</button>
+            <div style={{ fontSize: 8, opacity: 0.7 }}>Compare seeds: cost, time & profit.</div>
+          </Panel>
+
+          <Panel title="Inventory">
+            <div style={{ fontSize: 9, opacity: 0.7, textTransform: "uppercase", letterSpacing: 1 }}>Seeds</div>
+            {CROP_ORDER.map((id) => (
+              <StatusLine key={`seed-${id}`} label={CROPS[id].name} value={`${ui.seeds[id]}`} />
+            ))}
+            <div style={{ fontSize: 9, opacity: 0.7, textTransform: "uppercase", letterSpacing: 1, marginTop: 4 }}>Harvested</div>
+            {CROP_ORDER.map((id) => (
+              <StatusLine key={`harv-${id}`} label={CROPS[id].name} value={`${ui.harvested[id]}`} />
+            ))}
           </Panel>
 
           <Panel title="How to Play">
             <ol style={{ fontSize: 9, lineHeight: 1.6, paddingLeft: 14 }}>
               <li>Click a worker to select them.</li>
-              <li>Click soil, crops, or the shipping bin.</li>
-              <li>Only the selected worker gets the command.</li>
-              <li>Busy selected workers keep their own queue.</li>
+              <li>Click empty soil to prepare it.</li>
+              <li>Click prepared soil to choose a crop.</li>
+              <li>Click ripe crops, then the shipping bin to sell.</li>
             </ol>
-            <div style={{ fontSize: 9, opacity: 0.7 }}>Drag map or use arrow keys/WASD to pan freely.</div>
+            <div style={{ fontSize: 9, opacity: 0.7 }}>Drag map or use arrow keys/WASD to pan.</div>
           </Panel>
         </aside>
       </div>
