@@ -1429,9 +1429,16 @@ export default function KidFarmGame() {
             <button className="pixel-btn" onClick={() => setJournalOpen(true)}>Farm Journal</button>
           </Panel>
 
+          <Panel title="Milking Parlor">
+            <StatusLine label="Cow" value={ui.cowReady ? "Ready to milk" : "Milked today"} />
+            <div style={{ fontSize: 9, opacity: 0.7 }}>
+              Click the cow with a worker selected to queue a Milk Cow task (+{MILK_YIELD} Milk).
+            </div>
+          </Panel>
+
           <Panel title="Current Prices">
-            {CROP_ORDER.map((id) => (
-              <StatusLine key={`price-${id}`} label={CROPS[id].name} value={`${ui.prices[id]}c`} />
+            {PRODUCT_ORDER.map((id) => (
+              <StatusLine key={`price-${id}`} label={productName(id)} value={`${ui.prices[id]}c`} />
             ))}
           </Panel>
 
@@ -1441,8 +1448,8 @@ export default function KidFarmGame() {
               <StatusLine key={`seed-${id}`} label={CROPS[id].name} value={`${ui.seeds[id]}`} />
             ))}
             <div style={{ fontSize: 9, opacity: 0.7, textTransform: "uppercase", letterSpacing: 1, marginTop: 4 }}>Harvested</div>
-            {CROP_ORDER.map((id) => (
-              <StatusLine key={`harv-${id}`} label={CROPS[id].name} value={`${ui.harvested[id]}`} />
+            {PRODUCT_ORDER.map((id) => (
+              <StatusLine key={`harv-${id}`} label={productName(id)} value={`${ui.harvested[id]}`} />
             ))}
           </Panel>
 
@@ -1451,10 +1458,19 @@ export default function KidFarmGame() {
               <li>Click a worker to select them.</li>
               <li>Click empty soil to prepare it.</li>
               <li>Click prepared soil to choose a crop.</li>
+              <li>Click the cow to milk it (once per day).</li>
               <li>Click ripe crops, then the shipping bin to sell.</li>
-              <li>Watch the seasons — the tree shows you!</li>
             </ol>
             <div style={{ fontSize: 9, opacity: 0.7 }}>Drag map or use arrow keys/WASD to pan.</div>
+            <button
+              className="pixel-btn"
+              style={{ background: "var(--color-destructive)", color: "#fff" }}
+              onClick={() => {
+                if (window.confirm("Reset your farm? This deletes saved progress.")) resetGame();
+              }}
+            >
+              Reset Game
+            </button>
           </Panel>
         </aside>
       </div>
