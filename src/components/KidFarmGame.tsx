@@ -912,12 +912,18 @@ export default function KidFarmGame() {
     drawWell(ctx, WELL.x * TILE, WELL.y * TILE);
     drawShippingBin(ctx, SHIPPING_BIN.x * TILE, SHIPPING_BIN.y * TILE);
 
+    // Milking Parlor + cow
+    drawMilkingParlor(ctx, MILKING_PARLOR.x * TILE, MILKING_PARLOR.y * TILE, MILKING_PARLOR.w * TILE, MILKING_PARLOR.h * TILE);
+    drawCow(ctx, s.cow.x, s.cow.y, s.cow.lastMilkedDay === s.day, now);
+
     // Season landmark tree
     drawSeasonTree(ctx, SEASON_TREE.x, SEASON_TREE.y, s.season, now);
 
     const hover = pointerToTile();
     if (hover) {
-      const valid = inField(hover.tx, hover.ty) || (hover.tx === SHIPPING_BIN.x && hover.ty === SHIPPING_BIN.y);
+      const valid = inField(hover.tx, hover.ty)
+        || (hover.tx === SHIPPING_BIN.x && hover.ty === SHIPPING_BIN.y)
+        || inMilkingParlor(hover.tx, hover.ty);
       ctx.strokeStyle = valid ? COLORS.white : "rgba(255,255,255,0.4)";
       ctx.strokeRect(hover.tx * TILE + 0.5, hover.ty * TILE + 0.5, TILE - 1, TILE - 1);
     }
