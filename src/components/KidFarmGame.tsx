@@ -1361,8 +1361,14 @@ export default function KidFarmGame() {
 
     const sorted = [...s.workers].sort((a, b) => a.y - b.y);
     for (const worker of sorted) {
-      const tractorPlanting = !!(s.equipment.tractor && worker.task && worker.task.kind === "plant" && worker.workTimer > 0);
-      drawWorker(ctx, worker, worker.id === s.selectedWorkerId, tractorPlanting);
+      const t = worker.task;
+      const onTruck = !!(t && (
+        ((t.kind === "plant" || t.kind === "prepare") && s.equipment.tractor) ||
+        (t.kind === "harvest" && s.equipment.harvester)
+      ));
+      const tractorPlanting = onTruck;
+      void tractorPlanting;
+      drawWorker(ctx, worker, worker.id === s.selectedWorkerId, onTruck, t?.kind);
       drawWorkerText(ctx, worker, worker.id === s.selectedWorkerId);
     }
 
