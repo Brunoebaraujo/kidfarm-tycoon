@@ -14,6 +14,7 @@ type Task = {
   tx: number;
   ty: number;
   crop?: CropId;
+  tiles?: { tx: number; ty: number }[];
 };
 
 type Worker = {
