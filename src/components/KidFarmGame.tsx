@@ -871,6 +871,7 @@ export default function KidFarmGame() {
       }
       s.selectedWorkerId = data.selectedWorkerId ?? s.workers[0].id;
       s.cow = data.cow ?? { x: COW_TILE.x * TILE + TILE / 2, y: COW_TILE.y * TILE + TILE / 2, lastMilkedDay: 0 };
+      s.equipment = { manualPlow: false, tractor: false, harvester: false, ...(data.equipment ?? {}) };
       nextTaskId.current = data.nextTaskId ?? 1;
       s.seasonBanner = { text: "", age: 9999, ttl: 1 };
       syncUi(true);
