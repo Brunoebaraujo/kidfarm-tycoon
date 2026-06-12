@@ -108,8 +108,11 @@ function getTaskDuration(kind: TaskKind, equipment: Equipment, tileCount = 1) {
     if (equipment.harvester) ms *= 0.25;
   } else if (kind === "plant") {
     if (equipment.tractor) {
-      // Tractor seeder: fast scatter, modest scaling with number of tiles.
-      ms = ms * 0.6 + tileCount * 180;
+      // Tractor seeder: fixed quick per-tile sow so planting 10 tiles
+      // (queued one-by-one) totals roughly the same time as planting
+      // ~2 tiles by hand. Animation plays tile-by-tile.
+      ms = 300;
+      void tileCount;
     }
   }
   return Math.max(120, Math.round(ms));
@@ -885,7 +888,18 @@ export default function KidFarmGame() {
       return;
     }
     const tiles = getAffectedTiles("plant", prompt.tx, prompt.ty, crop);
-    assignTask({ kind: "plant", tx: prompt.tx, ty: prompt.ty, crop, tiles });
+    if (s.equipment.tractor && tiles.length > 1) {
+      const worker = selectedWorker();
+      for (const t of tiles) {
+        worker.queue.push({ kind: "plant", tx: t.tx, ty: t.ty, crop, id: nextTaskId.current });
+        nextTaskId.current += 1;
+      }
+      setMessage(`Tractor sowing ${tiles.length} × ${CROPS[crop].name} queued for ${worker.name}.`);
+      logJournal(`Tractor sowing ${tiles.length} × ${CROPS[crop].name} (${GROW_DAYS[crop][s.season]}d)`);
+      syncUi(true);
+    } else {
+      assignTask({ kind: "plant", tx: prompt.tx, ty: prompt.ty, crop, tiles });
+    }
   }
 
   function completeTask(worker: Worker) {
@@ -948,7 +962,7 @@ export default function KidFarmGame() {
         planted += 1;
       }
       if (planted > 1) logJournal(`Tractor sowed ${planted} × ${CROPS[crop].name} (${GROW_DAYS[crop][s.season]}d)`);
-      else if (planted === 1) logJournal(`Planted ${CROPS[crop].name} (${GROW_DAYS[crop][s.season]}d)`);
+      else if (planted === 1 && !s.equipment.tractor) logJournal(`Planted ${CROPS[crop].name} (${GROW_DAYS[crop][s.season]}d)`);
     } else if (task.kind === "harvest") {
       const totals: Partial<Record<CropId, number>> = {};
       for (const t of tiles) {
