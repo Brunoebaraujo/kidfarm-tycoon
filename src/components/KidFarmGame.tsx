@@ -1617,6 +1617,12 @@ export default function KidFarmGame() {
             <button className="pixel-btn" onClick={() => setJournalOpen(true)}>Farm Journal</button>
           </Panel>
 
+          <Panel title="Equipment">
+            {(["manualPlow", "tractor", "harvester"] as EquipmentId[]).map((id) => (
+              <StatusLine key={id} label={EQUIPMENT_LABELS[id]} value={ui.equipment[id] ? "Owned" : "Not owned"} />
+            ))}
+          </Panel>
+
           <Panel title="Milking Parlor">
             <StatusLine label="Cow" value={ui.cowReady ? "Ready to milk" : "Milked today"} />
             <div style={{ fontSize: 9, opacity: 0.7 }}>
