@@ -880,7 +880,7 @@ export default function KidFarmGame() {
       const tiles = getAffectedTiles("harvest", tx, ty);
       if (s.equipment.harvester && tiles.length > 1) {
         queuePerTile(
-          tiles.map((t) => ({ kind: "harvest", tx: t.tx, ty: t.ty, crop: s.fields[fieldIdx(t.tx, t.ty)].crop ?? field.crop })),
+          tiles.map((t) => ({ kind: "harvest", tx: t.tx, ty: t.ty, crop: s.fields[fieldIdx(t.tx, t.ty)].crop ?? field.crop ?? undefined })),
           `Harvester collecting ${tiles.length} tiles`,
         );
       } else {
