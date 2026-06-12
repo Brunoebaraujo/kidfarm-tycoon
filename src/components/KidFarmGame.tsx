@@ -577,7 +577,7 @@ function drawCow(ctx: CanvasRenderingContext2D, cx: number, cy: number, milked: 
   ctx.textAlign = "left";
 }
 
-function drawWorker(ctx: CanvasRenderingContext2D, worker: Worker, isSelected: boolean, withTractorPlant = false) {
+function drawWorker(ctx: CanvasRenderingContext2D, worker: Worker, isSelected: boolean, onTruck = false, taskKind?: TaskKind) {
   const x = worker.x | 0;
   const y = worker.y | 0;
   ctx.fillStyle = COLORS.shadow;
@@ -612,7 +612,7 @@ function drawWorker(ctx: CanvasRenderingContext2D, worker: Worker, isSelected: b
     px(ctx, worker.facing === "right" ? x + 2 : x + 1, top + 5, 1, 1, COLORS.black);
   }
 
-  if (withTractorPlant) drawTractorPlantOverlay(ctx, worker);
+  if (onTruck) drawTractorPlantOverlay(ctx, worker, taskKind === "plant");
 }
 
 function drawTractorPlantOverlay(ctx: CanvasRenderingContext2D, worker: Worker) {
