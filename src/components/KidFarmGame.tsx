@@ -1327,7 +1327,8 @@ export default function KidFarmGame() {
 
     const sorted = [...s.workers].sort((a, b) => a.y - b.y);
     for (const worker of sorted) {
-      drawWorker(ctx, worker, worker.id === s.selectedWorkerId);
+      const tractorPlanting = !!(s.equipment.tractor && worker.task && worker.task.kind === "plant" && worker.workTimer > 0);
+      drawWorker(ctx, worker, worker.id === s.selectedWorkerId, tractorPlanting);
       drawWorkerText(ctx, worker, worker.id === s.selectedWorkerId);
     }
 
