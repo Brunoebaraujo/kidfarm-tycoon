@@ -224,7 +224,7 @@ function createFields(): Field[] {
 }
 
 function makeWorker(id: string, name: string, x: number, y: number, hair: string, shirt: string): Worker {
-  return { id, name, x, y, task: null, queue: [], facing: "down", workTimer: 0, walkPhase: 0, hair, shirt };
+  return { id, name, x, y, task: null, queue: [], facing: "down", workTimer: 0, workTotal: 0, walkPhase: 0, hair, shirt };
 }
 
 function workerStatus(worker: Worker) {
