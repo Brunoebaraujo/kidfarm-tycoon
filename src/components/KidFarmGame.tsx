@@ -836,6 +836,7 @@ export default function KidFarmGame() {
       })),
       selectedWorkerId: s.selectedWorkerId,
       cow: s.cow,
+      equipment: s.equipment,
       nextTaskId: nextTaskId.current,
     };
   }
