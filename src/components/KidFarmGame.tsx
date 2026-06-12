@@ -949,12 +949,17 @@ export default function KidFarmGame() {
         worker.walkPhase += dt * 0.012;
         worker.facing = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : (dy > 0 ? "down" : "up");
       } else {
-        if (worker.workTimer === 0) worker.workTimer = WORK_MS;
+        if (worker.workTimer === 0) {
+          const dur = getTaskDuration(worker.task.kind, s.equipment);
+          worker.workTotal = dur;
+          worker.workTimer = dur;
+        }
         worker.workTimer -= dt;
         if (worker.workTimer <= 0) {
           completeTask(worker);
           worker.task = null;
           worker.workTimer = 0;
+          worker.workTotal = 0;
         }
       }
     }
