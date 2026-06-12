@@ -605,6 +605,7 @@ export default function KidFarmGame() {
 
   const [plantPrompt, setPlantPrompt] = useState<{ tx: number; ty: number } | null>(null);
   const [shopOpen, setShopOpen] = useState(false);
+  const [shopTab, setShopTab] = useState<"seeds" | "equipment" | "pesticides" | "land">("seeds");
   const [marketOpen, setMarketOpen] = useState(false);
   const [journalOpen, setJournalOpen] = useState(false);
 
