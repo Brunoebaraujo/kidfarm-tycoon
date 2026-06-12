@@ -1097,7 +1097,19 @@ export default function KidFarmGame() {
       window.removeEventListener("beforeunload", onBeforeUnload);
       saveGame();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const img = new Image();
+    img.src = "/src/assets/buildings/farmhouse.png";
+    img.onload = () => {
+      farmhouseImgRef.current = img;
+      farmhouseLoadedRef.current = true;
+    };
+    img.onerror = () => {
+      farmhouseLoadedRef.current = false;
+    };
   }, []);
 
   useEffect(() => {
