@@ -61,7 +61,7 @@ const MAP_W = 22;
 const MAP_H = 16;
 const FIELD_AREA = { x0: 3, y0: 5, x1: 12, y1: 12 };
 const SHIPPING_BIN = { x: 16, y: 11 };
-const FARMHOUSE = { x: 16, y: 4, w: 4, h: 3 };
+const FARMHOUSE = { x: 9, y: 1, w: 5, h: 3 };
 const BARN = { x: 14, y: 8, w: 3, h: 3 };
 const COOP = { x: 17, y: 8, w: 3, h: 2 };
 const WELL = { x: 13, y: 6 };
@@ -341,6 +341,81 @@ function drawRectBuilding(ctx: CanvasRenderingContext2D, x: number, y: number, w
   for (let r = 0; r < h / 3; r += 1) {
     const inset = Math.floor((r / (h / 3)) * (w / 2 - 2));
     px(ctx, x + inset, y + r, w - inset * 2, 1, roof);
+  }
+}
+
+// Simple, cozy pixelart farmhouse — designed to be the starter house.
+// Future upgrades can swap this function for larger / fancier variants.
+function drawFarmhouse(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
+  // ground shadow
+  px(ctx, x + 6, y + h - 3, w - 12, 3, COLORS.shadow);
+
+  // walls
+  const wallTop = y + Math.floor(h * 0.42);
+  const wallBottom = y + h - 4;
+  const wallLeft = x + 6;
+  const wallRight = x + w - 6;
+  const wallW = wallRight - wallLeft;
+  const wallH = wallBottom - wallTop;
+  px(ctx, wallLeft, wallTop, wallW, wallH, COLORS.woodLight);
+  // wood plank lines
+  for (let i = 6; i < wallH; i += 6) {
+    px(ctx, wallLeft, wallTop + i, wallW, 1, COLORS.wood);
+  }
+  // foundation
+  px(ctx, wallLeft - 1, wallBottom, wallW + 2, 4, COLORS.stoneDark);
+  px(ctx, wallLeft - 1, wallBottom, wallW + 2, 1, COLORS.stone);
+
+  // roof — triangular with eaves
+  const roofBaseY = wallTop;
+  const roofTopY = y + 2;
+  const roofH = roofBaseY - roofTopY;
+  const eaves = 4;
+  for (let r = 0; r < roofH; r += 1) {
+    const t = r / roofH;
+    const inset = Math.floor(t * (wallW / 2 + eaves));
+    const rx = wallLeft - eaves + inset;
+    const rw = (wallW + eaves * 2) - inset * 2;
+    px(ctx, rx, roofTopY + r, rw, 1, r < 2 ? COLORS.roofDark : COLORS.roof);
+  }
+  // roof highlight line
+  for (let r = 2; r < roofH; r += 4) {
+    const t = r / roofH;
+    const inset = Math.floor(t * (wallW / 2 + eaves));
+    px(ctx, wallLeft - eaves + inset, roofTopY + r, 2, 1, COLORS.roofLight);
+  }
+
+  // chimney
+  const chimX = wallLeft + Math.floor(wallW * 0.72);
+  const chimTop = roofTopY + 2;
+  px(ctx, chimX, chimTop, 5, Math.max(6, roofH - 2), COLORS.stoneDark);
+  px(ctx, chimX, chimTop, 5, 2, COLORS.stone);
+  // gentle smoke puffs
+  px(ctx, chimX + 1, chimTop - 3, 3, 2, "#f0f0f0");
+  px(ctx, chimX + 2, chimTop - 6, 3, 2, "#e0e0e0");
+
+  // door
+  const doorW = 8;
+  const doorH = Math.min(wallH - 4, 14);
+  const doorX = wallLeft + Math.floor(wallW / 2) - Math.floor(doorW / 2);
+  const doorY = wallBottom - doorH;
+  px(ctx, doorX, doorY, doorW, doorH, COLORS.woodDark);
+  px(ctx, doorX + 1, doorY + 1, doorW - 2, doorH - 1, COLORS.wood);
+  px(ctx, doorX + doorW - 3, doorY + Math.floor(doorH / 2), 1, 1, "#f7d94a"); // knob
+  // small step
+  px(ctx, doorX - 1, wallBottom, doorW + 2, 1, COLORS.stone);
+
+  // windows
+  const winY = wallTop + 4;
+  const winSize = 6;
+  const winLeftX = wallLeft + 4;
+  const winRightX = wallRight - 4 - winSize;
+  for (const wx of [winLeftX, winRightX]) {
+    px(ctx, wx - 1, winY - 1, winSize + 2, winSize + 2, COLORS.woodDark);
+    px(ctx, wx, winY, winSize, winSize, "#bfe6ff");
+    px(ctx, wx, winY, winSize, 2, "#7fbde0");
+    px(ctx, wx + Math.floor(winSize / 2), winY, 1, winSize, COLORS.woodDark);
+    px(ctx, wx, winY + Math.floor(winSize / 2), winSize, 1, COLORS.woodDark);
   }
 }
 
@@ -1146,7 +1221,7 @@ export default function KidFarmGame() {
     ctx.lineWidth = 1;
     ctx.strokeRect(FIELD_AREA.x0 * TILE + 0.5, FIELD_AREA.y0 * TILE + 0.5, (FIELD_AREA.x1 - FIELD_AREA.x0 + 1) * TILE - 1, (FIELD_AREA.y1 - FIELD_AREA.y0 + 1) * TILE - 1);
 
-    drawRectBuilding(ctx, FARMHOUSE.x * TILE, FARMHOUSE.y * TILE, FARMHOUSE.w * TILE, FARMHOUSE.h * TILE, COLORS.woodLight, COLORS.roof);
+    drawFarmhouse(ctx, FARMHOUSE.x * TILE, FARMHOUSE.y * TILE, FARMHOUSE.w * TILE, FARMHOUSE.h * TILE);
     drawRectBuilding(ctx, BARN.x * TILE, BARN.y * TILE, BARN.w * TILE, BARN.h * TILE, COLORS.roof, COLORS.roofDark);
     drawRectBuilding(ctx, COOP.x * TILE, COOP.y * TILE, COOP.w * TILE, COOP.h * TILE, COLORS.woodLight, COLORS.roof);
     drawRectBuilding(ctx, TOOLSHED.x * TILE, TOOLSHED.y * TILE, TOOLSHED.w * TILE, TOOLSHED.h * TILE, COLORS.wood, COLORS.stoneDark);
