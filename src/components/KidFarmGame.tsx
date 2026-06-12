@@ -1456,33 +1456,94 @@ export default function KidFarmGame() {
 
           {shopOpen && (
             <div className="absolute inset-0 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.45)" }}>
-              <div className="pixel-panel p-3 flex flex-col gap-2" style={{ minWidth: 280, maxWidth: 440 }}>
+              <div className="pixel-panel p-3 flex flex-col gap-2" style={{ minWidth: 300, maxWidth: 460, maxHeight: "92%", overflow: "auto" }}>
                 <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 1 }}>Farm Supply Store</div>
-                <div style={{ fontSize: 8, opacity: 0.7 }}>Cost · Grow ({SEASON_LABEL[ui.season]}) · Sell now · Yield</div>
-                {CROP_ORDER.map((id) => {
-                  const def = CROPS[id];
-                  const days = GROW_DAYS[id][ui.season];
-                  const price = ui.prices[id];
-                  const projected = def.yield * price - def.seedCost;
-                  return (
-                    <div key={id} className="pixel-panel" style={{ padding: 6, display: "flex", flexDirection: "column", gap: 4 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10 }}>
-                        <strong>{def.name}</strong>
-                        <span>Own: {ui.seeds[id]}</span>
-                      </div>
-                      <div style={{ fontSize: 9, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2 }}>
-                        <span>Cost: {def.seedCost}c</span>
-                        <span>Grow: {days}d</span>
-                        <span>Sell: {price}c</span>
-                        <span style={{ color: projected > 0 ? "#2a7a2a" : "#c84a3a" }}>If sold now: {projected}c</span>
-                      </div>
-                      <div style={{ display: "flex", gap: 4 }}>
-                        <button className="pixel-btn" style={{ flex: 1 }} onClick={() => buySeeds(id, 1)}>Buy 1 · {def.seedCost}c</button>
-                        <button className="pixel-btn" style={{ flex: 1 }} onClick={() => buySeeds(id, 5)}>Buy 5 · {def.seedCost * 5}c</button>
-                      </div>
-                    </div>
-                  );
-                })}
+                <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                  {(["seeds", "equipment", "pesticides", "land"] as const).map((t) => (
+                    <button key={t} className={`pixel-btn ${shopTab === t ? "accent" : ""}`} style={{ flex: 1, fontSize: 9 }} onClick={() => setShopTab(t)}>
+                      {t.charAt(0).toUpperCase() + t.slice(1)}
+                    </button>
+                  ))}
+                </div>
+
+                {shopTab === "seeds" && (
+                  <>
+                    <div style={{ fontSize: 8, opacity: 0.7 }}>Cost · Grow ({SEASON_LABEL[ui.season]}) · Sell now · Yield</div>
+                    {CROP_ORDER.map((id) => {
+                      const def = CROPS[id];
+                      const days = GROW_DAYS[id][ui.season];
+                      const price = ui.prices[id];
+                      const projected = def.yield * price - def.seedCost;
+                      return (
+                        <div key={id} className="pixel-panel" style={{ padding: 6, display: "flex", flexDirection: "column", gap: 4 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10 }}>
+                            <strong>{def.name}</strong>
+                            <span>Own: {ui.seeds[id]}</span>
+                          </div>
+                          <div style={{ fontSize: 9, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2 }}>
+                            <span>Cost: {def.seedCost}c</span>
+                            <span>Grow: {days}d</span>
+                            <span>Sell: {price}c</span>
+                            <span style={{ color: projected > 0 ? "#2a7a2a" : "#c84a3a" }}>If sold now: {projected}c</span>
+                          </div>
+                          <div style={{ display: "flex", gap: 4 }}>
+                            <button className="pixel-btn" style={{ flex: 1 }} onClick={() => buySeeds(id, 1)}>Buy 1 · {def.seedCost}c</button>
+                            <button className="pixel-btn" style={{ flex: 1 }} onClick={() => buySeeds(id, 5)}>Buy 5 · {def.seedCost * 5}c</button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </>
+                )}
+
+                {shopTab === "equipment" && (
+                  <>
+                    <div style={{ fontSize: 8, opacity: 0.7 }}>Upgrade path: Manual Plow → Tractor → Harvester</div>
+                    {(["manualPlow", "tractor", "harvester"] as EquipmentId[]).map((id) => {
+                      const owned = ui.equipment[id];
+                      const req = equipmentRequirement(id);
+                      const reqMet = !req || ui.equipment[req];
+                      const cost = EQUIPMENT_PRICES[id];
+                      const effect = id === "manualPlow"
+                        ? "−35% Prepare Soil time"
+                        : id === "tractor"
+                          ? "−75% Prepare Soil + 2×2 area"
+                          : "−75% Harvest + 2×2 area";
+                      return (
+                        <div key={id} className="pixel-panel" style={{ padding: 6, display: "flex", flexDirection: "column", gap: 4 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10 }}>
+                            <strong>{EQUIPMENT_LABELS[id]}</strong>
+                            <span style={{ color: owned ? "#2a7a2a" : "#7a5a30" }}>{owned ? "Owned" : "Not owned"}</span>
+                          </div>
+                          <div style={{ fontSize: 9 }}>Price: {cost}c · {effect}</div>
+                          {req && !reqMet && (
+                            <div style={{ fontSize: 9, color: "#c84a3a" }}>Requires {EQUIPMENT_LABELS[req]}</div>
+                          )}
+                          <button
+                            className="pixel-btn"
+                            disabled={owned || !reqMet || ui.coins < cost}
+                            onClick={() => buyEquipment(id)}
+                          >
+                            {owned ? "Owned" : `Buy · ${cost}c`}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </>
+                )}
+
+                {shopTab === "pesticides" && (
+                  <div className="pixel-panel" style={{ padding: 10, fontSize: 10, textAlign: "center", opacity: 0.7 }}>
+                    Pesticides — Coming soon
+                  </div>
+                )}
+
+                {shopTab === "land" && (
+                  <div className="pixel-panel" style={{ padding: 10, fontSize: 10, textAlign: "center", opacity: 0.7 }}>
+                    Land Expansion — Coming soon
+                  </div>
+                )}
+
                 <button className="pixel-btn primary" onClick={() => setShopOpen(false)}>Close Shop</button>
               </div>
             </div>
