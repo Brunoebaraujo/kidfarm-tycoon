@@ -1404,6 +1404,7 @@ export default function KidFarmGame() {
           <Chip label="Day" value={`${ui.day}`} swatch="#a9d8ef" />
           <Chip label="Season" value={`${seasonIcon[ui.season]} ${SEASON_LABEL[ui.season]}`} swatch={SEASON_TINT[ui.season]} />
           <Chip label="Time" value={ui.time} swatch="#fcdc70" />
+          <Chip label={ui.isNight ? "Night" : "Day"} value={ui.isNight ? "🌙 Sleeping" : "☀️ Working"} swatch={ui.isNight ? "#283058" : "#fff6a8"} />
           <Chip label="Selected" value={ui.selectedWorkerName} swatch="#fff06a" />
         </div>
       </header>
