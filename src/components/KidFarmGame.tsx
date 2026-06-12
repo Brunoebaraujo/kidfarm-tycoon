@@ -1121,7 +1121,8 @@ export default function KidFarmGame() {
         worker.facing = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : (dy > 0 ? "down" : "up");
       } else {
         if (worker.workTimer === 0) {
-          const dur = getTaskDuration(worker.task.kind, s.equipment);
+          const tileCount = worker.task.tiles?.length ?? 1;
+          const dur = getTaskDuration(worker.task.kind, s.equipment, tileCount);
           worker.workTotal = dur;
           worker.workTimer = dur;
         }
