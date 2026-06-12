@@ -73,10 +73,41 @@ const SAVE_KEY = "kidfarm-save-v1";
 const DAY_MS = 90_000;
 const DAILY_COST = 8;
 const HIRE_COST_BASE = 50;
-const WORK_MS = 850;
 const SEASON_DAYS = 10;
 const HISTORY_DAYS = 30;
 const JOURNAL_MAX = 100;
+
+// One in-game hour ≈ this many real ms (day cycle 06:00 → 22:00 = 16h).
+const HOUR_MS = 750;
+// Base MANUAL task durations (in ms) — slow on purpose so equipment matters.
+const TASK_MANUAL_MS: Record<TaskKind, number> = {
+  prepare: 4 * HOUR_MS,
+  plant: 2 * HOUR_MS,
+  harvest: 3 * HOUR_MS,
+  milk: 2 * HOUR_MS,
+  deliver: 2 * HOUR_MS,
+};
+const EQUIPMENT_PRICES: Record<EquipmentId, number> = { manualPlow: 75, tractor: 300, harvester: 500 };
+const EQUIPMENT_LABELS: Record<EquipmentId, string> = { manualPlow: "Manual Plow", tractor: "Tractor", harvester: "Harvester" };
+
+// Night = 20:00 → 06:00. Within one day cycle that's the last 2 of 16 in-game hours.
+const NIGHT_START_FRACTION = 14 / 16;
+
+function isNightAt(dayMs: number) {
+  return dayMs / DAY_MS >= NIGHT_START_FRACTION;
+}
+
+function getTaskDuration(kind: TaskKind, equipment: Equipment) {
+  let ms = TASK_MANUAL_MS[kind];
+  if (kind === "prepare") {
+    if (equipment.tractor) ms *= 0.25;
+    else if (equipment.manualPlow) ms *= 0.65;
+  } else if (kind === "harvest") {
+    if (equipment.harvester) ms *= 0.25;
+  }
+  return Math.max(120, Math.round(ms));
+}
+
 
 type CropDef = {
   id: CropId;
