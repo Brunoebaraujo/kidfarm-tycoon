@@ -599,6 +599,8 @@ export default function KidFarmGame() {
     message: "Selected Worker: Maya. Click soil to prepare it.",
     banner: { text: `${SEASON_LABEL[initialSeason]} has arrived`, visible: true },
     cowReady: true,
+    isNight: false,
+    equipment: { manualPlow: false, tractor: false, harvester: false } as Equipment,
   });
 
   const [plantPrompt, setPlantPrompt] = useState<{ tx: number; ty: number } | null>(null);
