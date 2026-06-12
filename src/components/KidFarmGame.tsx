@@ -843,7 +843,8 @@ export default function KidFarmGame() {
       setMessage(`Not enough seeds. Buy ${CROPS[crop].name} seeds first.`);
       return;
     }
-    assignTask({ kind: "plant", tx: prompt.tx, ty: prompt.ty, crop });
+    const tiles = getAffectedTiles("plant", prompt.tx, prompt.ty, crop);
+    assignTask({ kind: "plant", tx: prompt.tx, ty: prompt.ty, crop, tiles });
   }
 
   function completeTask(worker: Worker) {
