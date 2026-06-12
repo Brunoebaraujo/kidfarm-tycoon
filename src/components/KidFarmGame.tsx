@@ -988,7 +988,7 @@ export default function KidFarmGame() {
     }
 
     for (const worker of s.workers) {
-      if (!worker.task && worker.queue.length > 0) {
+      if (!worker.task && worker.queue.length > 0 && !s.isNight) {
         worker.task = worker.queue.shift() ?? null;
       }
       if (!worker.task) continue;
