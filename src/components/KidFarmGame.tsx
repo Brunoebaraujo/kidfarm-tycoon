@@ -665,6 +665,24 @@ export default function KidFarmGame() {
       && ty >= MILKING_PARLOR.y && ty < MILKING_PARLOR.y + MILKING_PARLOR.h;
   }
 
+  function getAffectedTiles(kind: TaskKind, tx: number, ty: number): { tx: number; ty: number }[] {
+    const s = stateRef.current;
+    const list: { tx: number; ty: number }[] = [];
+    const region = (kind === "prepare" && s.equipment.tractor) || (kind === "harvest" && s.equipment.harvester);
+    const candidates = region
+      ? [[0, 0], [1, 0], [0, 1], [1, 1]]
+      : [[0, 0]];
+    for (const [dx, dy] of candidates) {
+      const nx = tx + dx;
+      const ny = ty + dy;
+      if (!inField(nx, ny)) continue;
+      const f = s.fields[fieldIdx(nx, ny)];
+      if (kind === "prepare" && f.state === "empty") list.push({ tx: nx, ty: ny });
+      else if (kind === "harvest" && f.state === "ready" && f.crop) list.push({ tx: nx, ty: ny });
+    }
+    return list;
+  }
+
   const handleTileClick = useCallback((tx: number, ty: number) => {
     const s = stateRef.current;
     if (tx === SHIPPING_BIN.x && ty === SHIPPING_BIN.y) {
@@ -676,6 +694,10 @@ export default function KidFarmGame() {
       return;
     }
     if (inMilkingParlor(tx, ty)) {
+      if (s.isNight) {
+        setMessage("The cow is sleeping. Come back in the morning.");
+        return;
+      }
       if (s.cow.lastMilkedDay === s.day) {
         setMessage("The cow has already been milked today.");
         return;
@@ -687,13 +709,19 @@ export default function KidFarmGame() {
       setMessage("Click a worker to select, then click soil tiles, the cow, or the shipping bin.");
       return;
     }
+    if (s.isNight) {
+      setMessage("Workers are sleeping. Work resumes at 06:00.");
+      return;
+    }
     const field = s.fields[fieldIdx(tx, ty)];
     if (field.state === "empty") {
-      assignTask({ kind: "prepare", tx, ty });
+      const tiles = getAffectedTiles("prepare", tx, ty);
+      assignTask({ kind: "prepare", tx, ty, tiles });
     } else if (field.state === "prepared") {
       setPlantPrompt({ tx, ty });
     } else if (field.state === "ready" && field.crop) {
-      assignTask({ kind: "harvest", tx, ty, crop: field.crop });
+      const tiles = getAffectedTiles("harvest", tx, ty);
+      assignTask({ kind: "harvest", tx, ty, crop: field.crop, tiles });
     } else {
       setMessage("This crop is still growing.");
     }
