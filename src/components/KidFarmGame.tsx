@@ -1329,6 +1329,31 @@ export default function KidFarmGame() {
     syncUi(true);
   };
 
+  const equipmentRequirement = (id: EquipmentId): EquipmentId | null => {
+    if (id === "tractor") return "manualPlow";
+    if (id === "harvester") return "tractor";
+    return null;
+  };
+
+  const buyEquipment = (id: EquipmentId) => {
+    const s = stateRef.current;
+    if (s.equipment[id]) { setMessage(`${EQUIPMENT_LABELS[id]} already owned.`); return; }
+    const req = equipmentRequirement(id);
+    if (req && !s.equipment[req]) {
+      setMessage(`Requires ${EQUIPMENT_LABELS[req]} first.`);
+      return;
+    }
+    const cost = EQUIPMENT_PRICES[id];
+    if (s.coins < cost) { setMessage(`Need ${cost} coins for ${EQUIPMENT_LABELS[id]}.`); return; }
+    s.coins -= cost;
+    s.expenses += cost;
+    s.equipment[id] = true;
+    addFloater(FARMHOUSE.x * TILE, FARMHOUSE.y * TILE + 10, `-${cost}c`, COLORS.shirtRed);
+    setMessage(`Bought ${EQUIPMENT_LABELS[id]}.`);
+    logJournal(`Bought ${EQUIPMENT_LABELS[id]} (-${cost}c)`);
+    syncUi(true);
+  };
+
   const hireWorker = () => {
     const s = stateRef.current;
     const cost = HIRE_COST_BASE * s.workers.length;
