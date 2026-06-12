@@ -25,10 +25,14 @@ type Worker = {
   queue: Task[];
   facing: Facing;
   workTimer: number;
+  workTotal: number;
   walkPhase: number;
   hair: string;
   shirt: string;
 };
+
+type EquipmentId = "manualPlow" | "tractor" | "harvester";
+type Equipment = Record<EquipmentId, boolean>;
 
 type Field = {
   state: FieldState;
