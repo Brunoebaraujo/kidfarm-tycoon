@@ -557,6 +557,8 @@ export default function KidFarmGame() {
     workers: [makeWorker("maya", "Maya", 10 * TILE + TILE / 2, 4 * TILE + TILE / 2, COLORS.hairBlonde, COLORS.shirtRed)],
     selectedWorkerId: "maya",
     cow: { x: COW_TILE.x * TILE + TILE / 2, y: COW_TILE.y * TILE + TILE / 2, lastMilkedDay: 0 } as Cow,
+    equipment: { manualPlow: false, tractor: false, harvester: false } as Equipment,
+    isNight: false,
   });
 
   const stateRef = useRef({
