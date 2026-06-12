@@ -864,7 +864,7 @@ export default function KidFarmGame() {
       s.workers = (data.workers ?? []).map((w: { id: string; name: string; x: number; y: number; hair: string; shirt: string; facing?: Facing; queue?: Task[]; task?: Task | null }) => ({
         id: w.id, name: w.name, x: w.x, y: w.y, hair: w.hair, shirt: w.shirt,
         facing: (w.facing ?? "down") as Facing, queue: w.queue ?? [], task: w.task ?? null,
-        workTimer: 0, walkPhase: 0,
+        workTimer: 0, workTotal: 0, walkPhase: 0,
       }));
       if (s.workers.length === 0) {
         s.workers = [makeWorker("maya", "Maya", 10 * TILE + TILE / 2, 4 * TILE + TILE / 2, COLORS.hairBlonde, COLORS.shirtRed)];
