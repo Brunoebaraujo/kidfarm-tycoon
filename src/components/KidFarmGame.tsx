@@ -869,16 +869,37 @@ export default function KidFarmGame() {
     const field = s.fields[fieldIdx(tx, ty)];
     if (field.state === "empty") {
       const tiles = getAffectedTiles("prepare", tx, ty);
-      assignTask({ kind: "prepare", tx, ty, tiles });
+      if (s.equipment.tractor && tiles.length > 1) {
+        queuePerTile(tiles.map((t) => ({ kind: "prepare", tx: t.tx, ty: t.ty })), `Tractor preparing ${tiles.length} tiles`);
+      } else {
+        assignTask({ kind: "prepare", tx, ty, tiles });
+      }
     } else if (field.state === "prepared") {
       setPlantPrompt({ tx, ty });
     } else if (field.state === "ready" && field.crop) {
       const tiles = getAffectedTiles("harvest", tx, ty);
-      assignTask({ kind: "harvest", tx, ty, crop: field.crop, tiles });
+      if (s.equipment.harvester && tiles.length > 1) {
+        queuePerTile(
+          tiles.map((t) => ({ kind: "harvest", tx: t.tx, ty: t.ty, crop: s.fields[fieldIdx(t.tx, t.ty)].crop ?? field.crop })),
+          `Harvester collecting ${tiles.length} tiles`,
+        );
+      } else {
+        assignTask({ kind: "harvest", tx, ty, crop: field.crop, tiles });
+      }
     } else {
       setMessage("This crop is still growing.");
     }
   }, [setMessage]);
+
+  function queuePerTile(tasks: Omit<Task, "id">[], message: string) {
+    const worker = selectedWorker();
+    for (const t of tasks) {
+      worker.queue.push({ ...t, id: nextTaskId.current } as Task);
+      nextTaskId.current += 1;
+    }
+    setMessage(`${message} queued for ${worker.name}.`);
+    syncUi(true);
+  }
 
   function choosePlant(crop: CropId) {
     const prompt = plantPrompt;
@@ -891,14 +912,11 @@ export default function KidFarmGame() {
     }
     const tiles = getAffectedTiles("plant", prompt.tx, prompt.ty, crop);
     if (s.equipment.tractor && tiles.length > 1) {
-      const worker = selectedWorker();
-      for (const t of tiles) {
-        worker.queue.push({ kind: "plant", tx: t.tx, ty: t.ty, crop, id: nextTaskId.current });
-        nextTaskId.current += 1;
-      }
-      setMessage(`Tractor sowing ${tiles.length} × ${CROPS[crop].name} queued for ${worker.name}.`);
+      queuePerTile(
+        tiles.map((t) => ({ kind: "plant", tx: t.tx, ty: t.ty, crop })),
+        `Tractor sowing ${tiles.length} × ${CROPS[crop].name}`,
+      );
       logJournal(`Tractor sowing ${tiles.length} × ${CROPS[crop].name} (${GROW_DAYS[crop][s.season]}d)`);
-      syncUi(true);
     } else {
       assignTask({ kind: "plant", tx: prompt.tx, ty: prompt.ty, crop, tiles });
     }
