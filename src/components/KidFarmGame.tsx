@@ -344,6 +344,81 @@ function drawRectBuilding(ctx: CanvasRenderingContext2D, x: number, y: number, w
   }
 }
 
+// Simple, cozy pixelart farmhouse — designed to be the starter house.
+// Future upgrades can swap this function for larger / fancier variants.
+function drawFarmhouse(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
+  // ground shadow
+  px(ctx, x + 6, y + h - 3, w - 12, 3, COLORS.shadow);
+
+  // walls
+  const wallTop = y + Math.floor(h * 0.42);
+  const wallBottom = y + h - 4;
+  const wallLeft = x + 6;
+  const wallRight = x + w - 6;
+  const wallW = wallRight - wallLeft;
+  const wallH = wallBottom - wallTop;
+  px(ctx, wallLeft, wallTop, wallW, wallH, COLORS.woodLight);
+  // wood plank lines
+  for (let i = 6; i < wallH; i += 6) {
+    px(ctx, wallLeft, wallTop + i, wallW, 1, COLORS.wood);
+  }
+  // foundation
+  px(ctx, wallLeft - 1, wallBottom, wallW + 2, 4, COLORS.stoneDark);
+  px(ctx, wallLeft - 1, wallBottom, wallW + 2, 1, COLORS.stone);
+
+  // roof — triangular with eaves
+  const roofBaseY = wallTop;
+  const roofTopY = y + 2;
+  const roofH = roofBaseY - roofTopY;
+  const eaves = 4;
+  for (let r = 0; r < roofH; r += 1) {
+    const t = r / roofH;
+    const inset = Math.floor(t * (wallW / 2 + eaves));
+    const rx = wallLeft - eaves + inset;
+    const rw = (wallW + eaves * 2) - inset * 2;
+    px(ctx, rx, roofTopY + r, rw, 1, r < 2 ? COLORS.roofDark : COLORS.roof);
+  }
+  // roof highlight line
+  for (let r = 2; r < roofH; r += 4) {
+    const t = r / roofH;
+    const inset = Math.floor(t * (wallW / 2 + eaves));
+    px(ctx, wallLeft - eaves + inset, roofTopY + r, 2, 1, COLORS.roofLight);
+  }
+
+  // chimney
+  const chimX = wallLeft + Math.floor(wallW * 0.72);
+  const chimTop = roofTopY + 2;
+  px(ctx, chimX, chimTop, 5, Math.max(6, roofH - 2), COLORS.stoneDark);
+  px(ctx, chimX, chimTop, 5, 2, COLORS.stone);
+  // gentle smoke puffs
+  px(ctx, chimX + 1, chimTop - 3, 3, 2, "#f0f0f0");
+  px(ctx, chimX + 2, chimTop - 6, 3, 2, "#e0e0e0");
+
+  // door
+  const doorW = 8;
+  const doorH = Math.min(wallH - 4, 14);
+  const doorX = wallLeft + Math.floor(wallW / 2) - Math.floor(doorW / 2);
+  const doorY = wallBottom - doorH;
+  px(ctx, doorX, doorY, doorW, doorH, COLORS.woodDark);
+  px(ctx, doorX + 1, doorY + 1, doorW - 2, doorH - 1, COLORS.wood);
+  px(ctx, doorX + doorW - 3, doorY + Math.floor(doorH / 2), 1, 1, "#f7d94a"); // knob
+  // small step
+  px(ctx, doorX - 1, wallBottom, doorW + 2, 1, COLORS.stone);
+
+  // windows
+  const winY = wallTop + 4;
+  const winSize = 6;
+  const winLeftX = wallLeft + 4;
+  const winRightX = wallRight - 4 - winSize;
+  for (const wx of [winLeftX, winRightX]) {
+    px(ctx, wx - 1, winY - 1, winSize + 2, winSize + 2, COLORS.woodDark);
+    px(ctx, wx, winY, winSize, winSize, "#bfe6ff");
+    px(ctx, wx, winY, winSize, 2, "#7fbde0");
+    px(ctx, wx + Math.floor(winSize / 2), winY, 1, winSize, COLORS.woodDark);
+    px(ctx, wx, winY + Math.floor(winSize / 2), winSize, 1, COLORS.woodDark);
+  }
+}
+
 function drawShippingBin(ctx: CanvasRenderingContext2D, x: number, y: number) {
   px(ctx, x + 2, y + 8, TILE - 4, TILE - 12, COLORS.woodLight);
   px(ctx, x + 2, y + 8, TILE - 4, 3, COLORS.woodDark);
