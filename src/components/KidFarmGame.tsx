@@ -962,7 +962,7 @@ export default function KidFarmGame() {
         planted += 1;
       }
       if (planted > 1) logJournal(`Tractor sowed ${planted} × ${CROPS[crop].name} (${GROW_DAYS[crop][s.season]}d)`);
-      else if (planted === 1) logJournal(`Planted ${CROPS[crop].name} (${GROW_DAYS[crop][s.season]}d)`);
+      else if (planted === 1 && !s.equipment.tractor) logJournal(`Planted ${CROPS[crop].name} (${GROW_DAYS[crop][s.season]}d)`);
     } else if (task.kind === "harvest") {
       const totals: Partial<Record<CropId, number>> = {};
       for (const t of tiles) {
