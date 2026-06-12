@@ -774,26 +774,40 @@ export default function KidFarmGame() {
     }
 
     if (!inField(task.tx, task.ty)) return;
-    const field = s.fields[fieldIdx(task.tx, task.ty)];
-    if (task.kind === "prepare" && field.state === "empty") {
-      field.state = "prepared";
-    } else if (task.kind === "plant" && field.state === "prepared" && task.crop && s.seeds[task.crop] > 0) {
-      field.state = "planted";
-      field.growth = 0;
-      field.crop = task.crop;
-      // Lock growth duration based on CURRENT season at plant time.
-      field.growMs = cropGrowMs(task.crop, s.season);
-      s.seeds[task.crop] -= 1;
-      logJournal(`Planted ${CROPS[task.crop].name} (${GROW_DAYS[task.crop][s.season]}d)`);
-    } else if (task.kind === "harvest" && field.state === "ready" && field.crop) {
-      const def = CROPS[field.crop];
-      s.harvested[field.crop] += def.yield;
-      addFloater(worker.x, worker.y - 24, `+${def.yield} ${def.name}`, def.fruit);
-      logJournal(`Harvested ${def.yield} ${def.name}`);
-      field.state = "empty";
-      field.growth = 0;
-      field.growMs = 0;
-      field.crop = null;
+    const tiles = task.tiles && task.tiles.length > 0 ? task.tiles : [{ tx: task.tx, ty: task.ty }];
+
+    if (task.kind === "prepare") {
+      let prepared = 0;
+      for (const t of tiles) {
+        const f = s.fields[fieldIdx(t.tx, t.ty)];
+        if (f.state === "empty") { f.state = "prepared"; prepared += 1; }
+      }
+      if (prepared > 1) logJournal(`Tractor prepared ${prepared} tiles`);
+    } else if (task.kind === "plant") {
+      const f = s.fields[fieldIdx(task.tx, task.ty)];
+      if (f.state === "prepared" && task.crop && s.seeds[task.crop] > 0) {
+        f.state = "planted";
+        f.growth = 0;
+        f.crop = task.crop;
+        f.growMs = cropGrowMs(task.crop, s.season);
+        s.seeds[task.crop] -= 1;
+        logJournal(`Planted ${CROPS[task.crop].name} (${GROW_DAYS[task.crop][s.season]}d)`);
+      }
+    } else if (task.kind === "harvest") {
+      const totals: Partial<Record<CropId, number>> = {};
+      for (const t of tiles) {
+        const f = s.fields[fieldIdx(t.tx, t.ty)];
+        if (f.state === "ready" && f.crop) {
+          const def = CROPS[f.crop];
+          s.harvested[f.crop] += def.yield;
+          totals[f.crop] = (totals[f.crop] ?? 0) + def.yield;
+          f.state = "empty"; f.growth = 0; f.growMs = 0; f.crop = null;
+        }
+      }
+      for (const c of Object.keys(totals) as CropId[]) {
+        addFloater(worker.x, worker.y - 24, `+${totals[c]} ${CROPS[c].name}`, CROPS[c].fruit);
+        logJournal(`Harvested ${totals[c]} ${CROPS[c].name}${tiles.length > 1 ? " (Harvester)" : ""}`);
+      }
     }
   }
 
