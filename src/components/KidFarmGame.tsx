@@ -108,8 +108,11 @@ function getTaskDuration(kind: TaskKind, equipment: Equipment, tileCount = 1) {
     if (equipment.harvester) ms *= 0.25;
   } else if (kind === "plant") {
     if (equipment.tractor) {
-      // Tractor seeder: fast scatter, modest scaling with number of tiles.
-      ms = ms * 0.6 + tileCount * 180;
+      // Tractor seeder: fixed quick per-tile sow so planting 10 tiles
+      // (queued one-by-one) totals roughly the same time as planting
+      // ~2 tiles by hand. Animation plays tile-by-tile.
+      ms = 300;
+      void tileCount;
     }
   }
   return Math.max(120, Math.round(ms));
