@@ -1006,7 +1006,7 @@ export default function KidFarmGame() {
     const workers = s.workers.map((worker) => ({
       id: worker.id,
       name: worker.name,
-      status: workerStatus(worker),
+      status: workerStatus(worker, s.isNight),
       currentTask: taskName(worker.task),
       queueLength: worker.queue.length,
       isSelected: worker.id === s.selectedWorkerId,
@@ -1032,11 +1032,13 @@ export default function KidFarmGame() {
       prices,
       selectedWorkerId: selected.id,
       selectedWorkerName: selected.name,
-      selectedStatus: workerStatus(selected),
+      selectedStatus: workerStatus(selected, s.isNight),
       selectedCurrentTask: taskName(selected.task),
       selectedQueueLength: selected.queue.length,
       workers,
       cowReady: s.cow.lastMilkedDay !== s.day,
+      isNight: s.isNight,
+      equipment: { ...s.equipment },
     }));
   }
 
