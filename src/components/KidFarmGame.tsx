@@ -258,8 +258,9 @@ function makeWorker(id: string, name: string, x: number, y: number, hair: string
   return { id, name, x, y, task: null, queue: [], facing: "down", workTimer: 0, workTotal: 0, walkPhase: 0, hair, shirt };
 }
 
-function workerStatus(worker: Worker) {
+function workerStatus(worker: Worker, isNight: boolean) {
   if (worker.task) return worker.workTimer > 0 ? "Busy" : "Moving";
+  if (isNight) return worker.queue.length > 0 ? "Resting (resumes 06:00)" : "Sleeping";
   return "Idle";
 }
 
