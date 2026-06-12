@@ -888,7 +888,18 @@ export default function KidFarmGame() {
       return;
     }
     const tiles = getAffectedTiles("plant", prompt.tx, prompt.ty, crop);
-    assignTask({ kind: "plant", tx: prompt.tx, ty: prompt.ty, crop, tiles });
+    if (s.equipment.tractor && tiles.length > 1) {
+      const worker = selectedWorker();
+      for (const t of tiles) {
+        worker.queue.push({ kind: "plant", tx: t.tx, ty: t.ty, crop, id: nextTaskId.current });
+        nextTaskId.current += 1;
+      }
+      setMessage(`Tractor sowing ${tiles.length} × ${CROPS[crop].name} queued for ${worker.name}.`);
+      logJournal(`Tractor sowing ${tiles.length} × ${CROPS[crop].name} (${GROW_DAYS[crop][s.season]}d)`);
+      syncUi(true);
+    } else {
+      assignTask({ kind: "plant", tx: prompt.tx, ty: prompt.ty, crop, tiles });
+    }
   }
 
   function completeTask(worker: Worker) {
