@@ -98,6 +98,8 @@ function isNightAt(dayMs: number) {
 }
 
 const TRACTOR_PLANT_MAX = 10;
+const TRACTOR_PREPARE_MAX = 4;
+const HARVESTER_MAX = 4;
 
 function getTaskDuration(kind: TaskKind, equipment: Equipment, tileCount = 1) {
   let ms = TASK_MANUAL_MS[kind];
@@ -575,7 +577,7 @@ function drawCow(ctx: CanvasRenderingContext2D, cx: number, cy: number, milked: 
   ctx.textAlign = "left";
 }
 
-function drawWorker(ctx: CanvasRenderingContext2D, worker: Worker, isSelected: boolean, withTractorPlant = false) {
+function drawWorker(ctx: CanvasRenderingContext2D, worker: Worker, isSelected: boolean, onTruck = false, taskKind?: TaskKind) {
   const x = worker.x | 0;
   const y = worker.y | 0;
   ctx.fillStyle = COLORS.shadow;
@@ -610,10 +612,10 @@ function drawWorker(ctx: CanvasRenderingContext2D, worker: Worker, isSelected: b
     px(ctx, worker.facing === "right" ? x + 2 : x + 1, top + 5, 1, 1, COLORS.black);
   }
 
-  if (withTractorPlant) drawTractorPlantOverlay(ctx, worker);
+  if (onTruck) drawTractorPlantOverlay(ctx, worker, taskKind === "plant");
 }
 
-function drawTractorPlantOverlay(ctx: CanvasRenderingContext2D, worker: Worker) {
+function drawTractorPlantOverlay(ctx: CanvasRenderingContext2D, worker: Worker, withSeeds = true) {
   const x = worker.x | 0;
   const y = worker.y | 0;
   const phase = (worker.walkPhase * 0.6) % (Math.PI * 2);
@@ -642,13 +644,15 @@ function drawTractorPlantOverlay(ctx: CanvasRenderingContext2D, worker: Worker) 
   px(ctx, x + 2, y - 18, 7, 5, "#6b4a2b");
   px(ctx, x + 2, y - 19, 7, 1, "#4a3220");
 
-  // Scattering seeds — animated falling specks ahead of tractor
-  const seedColors = ["#f5c530", "#e8a93a", "#c98a1a"];
-  for (let i = 0; i < 5; i++) {
-    const t = (phase + i * 1.1) % (Math.PI * 2);
-    const sx = x + 4 + Math.cos(t) * 6;
-    const sy = y + 2 + ((t * 3) % 6);
-    px(ctx, sx | 0, sy | 0, 1, 1, seedColors[i % seedColors.length]);
+  if (withSeeds) {
+    // Scattering seeds — animated falling specks ahead of tractor
+    const seedColors = ["#f5c530", "#e8a93a", "#c98a1a"];
+    for (let i = 0; i < 5; i++) {
+      const t = (phase + i * 1.1) % (Math.PI * 2);
+      const sx = x + 4 + Math.cos(t) * 6;
+      const sy = y + 2 + ((t * 3) % 6);
+      px(ctx, sx | 0, sy | 0, 1, 1, seedColors[i % seedColors.length]);
+    }
   }
 }
 
@@ -794,42 +798,42 @@ export default function KidFarmGame() {
 
   function getAffectedTiles(kind: TaskKind, tx: number, ty: number, crop?: CropId): { tx: number; ty: number }[] {
     const s = stateRef.current;
-    const list: { tx: number; ty: number }[] = [];
+    // For plant/prepare/harvest with the right vehicle, BFS outward from the
+    // clicked tile and collect up to N tiles matching the required state.
+    // This finds the N CLOSEST eligible tiles rather than a rigid 2x2 box.
+    let maxN = 1;
+    let want: FieldState | null = null;
     if (kind === "plant") {
-      if (!s.equipment.tractor || !crop) {
-        return [{ tx, ty }];
-      }
-      // Tractor seeder: BFS outward from clicked tile, collecting prepared tiles, up to seed count or TRACTOR_PLANT_MAX.
+      if (!s.equipment.tractor || !crop) return [{ tx, ty }];
       const seedsAvail = s.seeds[crop] ?? 0;
-      const maxN = Math.min(TRACTOR_PLANT_MAX, seedsAvail);
-      if (maxN <= 0) return [];
-      const seen = new Set<string>();
-      const queue: { tx: number; ty: number }[] = [{ tx, ty }];
-      while (queue.length > 0 && list.length < maxN) {
-        const cur = queue.shift()!;
-        const key = `${cur.tx},${cur.ty}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        if (!inField(cur.tx, cur.ty)) continue;
-        const f = s.fields[fieldIdx(cur.tx, cur.ty)];
-        if (f.state === "prepared") list.push(cur);
-        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-          queue.push({ tx: cur.tx + dx, ty: cur.ty + dy });
-        }
-      }
-      return list;
+      maxN = Math.min(TRACTOR_PLANT_MAX, seedsAvail);
+      want = "prepared";
+    } else if (kind === "prepare") {
+      if (!s.equipment.tractor) return [{ tx, ty }];
+      maxN = TRACTOR_PREPARE_MAX;
+      want = "empty";
+    } else if (kind === "harvest") {
+      if (!s.equipment.harvester) return [{ tx, ty }];
+      maxN = HARVESTER_MAX;
+      want = "ready";
+    } else {
+      return [{ tx, ty }];
     }
-    const region = (kind === "prepare" && s.equipment.tractor) || (kind === "harvest" && s.equipment.harvester);
-    const candidates = region
-      ? [[0, 0], [1, 0], [0, 1], [1, 1]]
-      : [[0, 0]];
-    for (const [dx, dy] of candidates) {
-      const nx = tx + dx;
-      const ny = ty + dy;
-      if (!inField(nx, ny)) continue;
-      const f = s.fields[fieldIdx(nx, ny)];
-      if (kind === "prepare" && f.state === "empty") list.push({ tx: nx, ty: ny });
-      else if (kind === "harvest" && f.state === "ready" && f.crop) list.push({ tx: nx, ty: ny });
+    if (maxN <= 0) return [];
+    const list: { tx: number; ty: number }[] = [];
+    const seen = new Set<string>();
+    const queue: { tx: number; ty: number }[] = [{ tx, ty }];
+    while (queue.length > 0 && list.length < maxN) {
+      const cur = queue.shift()!;
+      const key = `${cur.tx},${cur.ty}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (!inField(cur.tx, cur.ty)) continue;
+      const f = s.fields[fieldIdx(cur.tx, cur.ty)];
+      if (f.state === want && (kind !== "harvest" || f.crop)) list.push(cur);
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        queue.push({ tx: cur.tx + dx, ty: cur.ty + dy });
+      }
     }
     return list;
   }
@@ -867,16 +871,37 @@ export default function KidFarmGame() {
     const field = s.fields[fieldIdx(tx, ty)];
     if (field.state === "empty") {
       const tiles = getAffectedTiles("prepare", tx, ty);
-      assignTask({ kind: "prepare", tx, ty, tiles });
+      if (s.equipment.tractor && tiles.length > 1) {
+        queuePerTile(tiles.map((t) => ({ kind: "prepare", tx: t.tx, ty: t.ty })), `Tractor preparing ${tiles.length} tiles`);
+      } else {
+        assignTask({ kind: "prepare", tx, ty, tiles });
+      }
     } else if (field.state === "prepared") {
       setPlantPrompt({ tx, ty });
     } else if (field.state === "ready" && field.crop) {
       const tiles = getAffectedTiles("harvest", tx, ty);
-      assignTask({ kind: "harvest", tx, ty, crop: field.crop, tiles });
+      if (s.equipment.harvester && tiles.length > 1) {
+        queuePerTile(
+          tiles.map((t) => ({ kind: "harvest", tx: t.tx, ty: t.ty, crop: s.fields[fieldIdx(t.tx, t.ty)].crop ?? field.crop ?? undefined })),
+          `Harvester collecting ${tiles.length} tiles`,
+        );
+      } else {
+        assignTask({ kind: "harvest", tx, ty, crop: field.crop, tiles });
+      }
     } else {
       setMessage("This crop is still growing.");
     }
   }, [setMessage]);
+
+  function queuePerTile(tasks: Omit<Task, "id">[], message: string) {
+    const worker = selectedWorker();
+    for (const t of tasks) {
+      worker.queue.push({ ...t, id: nextTaskId.current } as Task);
+      nextTaskId.current += 1;
+    }
+    setMessage(`${message} queued for ${worker.name}.`);
+    syncUi(true);
+  }
 
   function choosePlant(crop: CropId) {
     const prompt = plantPrompt;
@@ -889,14 +914,11 @@ export default function KidFarmGame() {
     }
     const tiles = getAffectedTiles("plant", prompt.tx, prompt.ty, crop);
     if (s.equipment.tractor && tiles.length > 1) {
-      const worker = selectedWorker();
-      for (const t of tiles) {
-        worker.queue.push({ kind: "plant", tx: t.tx, ty: t.ty, crop, id: nextTaskId.current });
-        nextTaskId.current += 1;
-      }
-      setMessage(`Tractor sowing ${tiles.length} × ${CROPS[crop].name} queued for ${worker.name}.`);
+      queuePerTile(
+        tiles.map((t) => ({ kind: "plant", tx: t.tx, ty: t.ty, crop })),
+        `Tractor sowing ${tiles.length} × ${CROPS[crop].name}`,
+      );
       logJournal(`Tractor sowing ${tiles.length} × ${CROPS[crop].name} (${GROW_DAYS[crop][s.season]}d)`);
-      syncUi(true);
     } else {
       assignTask({ kind: "plant", tx: prompt.tx, ty: prompt.ty, crop, tiles });
     }
@@ -1341,8 +1363,14 @@ export default function KidFarmGame() {
 
     const sorted = [...s.workers].sort((a, b) => a.y - b.y);
     for (const worker of sorted) {
-      const tractorPlanting = !!(s.equipment.tractor && worker.task && worker.task.kind === "plant" && worker.workTimer > 0);
-      drawWorker(ctx, worker, worker.id === s.selectedWorkerId, tractorPlanting);
+      const t = worker.task;
+      const onTruck = !!(t && (
+        ((t.kind === "plant" || t.kind === "prepare") && s.equipment.tractor) ||
+        (t.kind === "harvest" && s.equipment.harvester)
+      ));
+      const tractorPlanting = onTruck;
+      void tractorPlanting;
+      drawWorker(ctx, worker, worker.id === s.selectedWorkerId, onTruck, t?.kind);
       drawWorkerText(ctx, worker, worker.id === s.selectedWorkerId);
     }
 
