@@ -960,6 +960,13 @@ export default function KidFarmGame() {
       recordPriceHistory();
     }
 
+    const nightNow = isNightAt(s.dayMs);
+    if (nightNow !== s.isNight) {
+      s.isNight = nightNow;
+      if (nightNow) logJournal("Workers stopped for the night (20:00)");
+      else logJournal("Workers resumed in the morning (06:00)");
+    }
+
     if (s.seasonBanner) {
       s.seasonBanner.age += dt;
       if (s.seasonBanner.age >= s.seasonBanner.ttl && ui.banner.visible) {
