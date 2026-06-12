@@ -892,15 +892,22 @@ export default function KidFarmGame() {
       }
       if (prepared > 1) logJournal(`Tractor prepared ${prepared} tiles`);
     } else if (task.kind === "plant") {
-      const f = s.fields[fieldIdx(task.tx, task.ty)];
-      if (f.state === "prepared" && task.crop && s.seeds[task.crop] > 0) {
+      if (!task.crop) return;
+      const crop = task.crop;
+      let planted = 0;
+      for (const t of tiles) {
+        if (s.seeds[crop] <= 0) break;
+        const f = s.fields[fieldIdx(t.tx, t.ty)];
+        if (f.state !== "prepared") continue;
         f.state = "planted";
         f.growth = 0;
-        f.crop = task.crop;
-        f.growMs = cropGrowMs(task.crop, s.season);
-        s.seeds[task.crop] -= 1;
-        logJournal(`Planted ${CROPS[task.crop].name} (${GROW_DAYS[task.crop][s.season]}d)`);
+        f.crop = crop;
+        f.growMs = cropGrowMs(crop, s.season);
+        s.seeds[crop] -= 1;
+        planted += 1;
       }
+      if (planted > 1) logJournal(`Tractor sowed ${planted} × ${CROPS[crop].name} (${GROW_DAYS[crop][s.season]}d)`);
+      else if (planted === 1) logJournal(`Planted ${CROPS[crop].name} (${GROW_DAYS[crop][s.season]}d)`);
     } else if (task.kind === "harvest") {
       const totals: Partial<Record<CropId, number>> = {};
       for (const t of tiles) {
