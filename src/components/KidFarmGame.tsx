@@ -1152,9 +1152,9 @@ export default function KidFarmGame() {
     ctx.fillStyle = COLORS.white;
     ctx.fillText(status, worker.x, worker.y + 21);
 
-    if (worker.task && worker.workTimer > 0) {
+    if (worker.task && worker.workTimer > 0 && worker.workTotal > 0) {
       const width = 24;
-      const progress = clamp(1 - worker.workTimer / WORK_MS, 0, 1);
+      const progress = clamp(1 - worker.workTimer / worker.workTotal, 0, 1);
       px(ctx, worker.x - width / 2, worker.y + 25, width, 4, COLORS.black);
       px(ctx, worker.x - width / 2 + 1, worker.y + 26, Math.floor((width - 2) * progress), 2, COLORS.selected);
     }
