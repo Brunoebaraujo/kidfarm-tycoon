@@ -14,6 +14,7 @@ type Task = {
   tx: number;
   ty: number;
   crop?: CropId;
+  tiles?: { tx: number; ty: number }[];
 };
 
 type Worker = {
@@ -25,10 +26,14 @@ type Worker = {
   queue: Task[];
   facing: Facing;
   workTimer: number;
+  workTotal: number;
   walkPhase: number;
   hair: string;
   shirt: string;
 };
+
+type EquipmentId = "manualPlow" | "tractor" | "harvester";
+type Equipment = Record<EquipmentId, boolean>;
 
 type Field = {
   state: FieldState;
@@ -68,10 +73,41 @@ const SAVE_KEY = "kidfarm-save-v1";
 const DAY_MS = 90_000;
 const DAILY_COST = 8;
 const HIRE_COST_BASE = 50;
-const WORK_MS = 850;
 const SEASON_DAYS = 10;
 const HISTORY_DAYS = 30;
 const JOURNAL_MAX = 100;
+
+// One in-game hour ≈ this many real ms (day cycle 06:00 → 22:00 = 16h).
+const HOUR_MS = 750;
+// Base MANUAL task durations (in ms) — slow on purpose so equipment matters.
+const TASK_MANUAL_MS: Record<TaskKind, number> = {
+  prepare: 4 * HOUR_MS,
+  plant: 2 * HOUR_MS,
+  harvest: 3 * HOUR_MS,
+  milk: 2 * HOUR_MS,
+  deliver: 2 * HOUR_MS,
+};
+const EQUIPMENT_PRICES: Record<EquipmentId, number> = { manualPlow: 75, tractor: 300, harvester: 500 };
+const EQUIPMENT_LABELS: Record<EquipmentId, string> = { manualPlow: "Manual Plow", tractor: "Tractor", harvester: "Harvester" };
+
+// Night = 20:00 → 06:00. Within one day cycle that's the last 2 of 16 in-game hours.
+const NIGHT_START_FRACTION = 14 / 16;
+
+function isNightAt(dayMs: number) {
+  return dayMs / DAY_MS >= NIGHT_START_FRACTION;
+}
+
+function getTaskDuration(kind: TaskKind, equipment: Equipment) {
+  let ms = TASK_MANUAL_MS[kind];
+  if (kind === "prepare") {
+    if (equipment.tractor) ms *= 0.25;
+    else if (equipment.manualPlow) ms *= 0.65;
+  } else if (kind === "harvest") {
+    if (equipment.harvester) ms *= 0.25;
+  }
+  return Math.max(120, Math.round(ms));
+}
+
 
 type CropDef = {
   id: CropId;
@@ -219,11 +255,12 @@ function createFields(): Field[] {
 }
 
 function makeWorker(id: string, name: string, x: number, y: number, hair: string, shirt: string): Worker {
-  return { id, name, x, y, task: null, queue: [], facing: "down", workTimer: 0, walkPhase: 0, hair, shirt };
+  return { id, name, x, y, task: null, queue: [], facing: "down", workTimer: 0, workTotal: 0, walkPhase: 0, hair, shirt };
 }
 
-function workerStatus(worker: Worker) {
+function workerStatus(worker: Worker, isNight: boolean) {
   if (worker.task) return worker.workTimer > 0 ? "Busy" : "Moving";
+  if (isNight) return worker.queue.length > 0 ? "Resting (resumes 06:00)" : "Sleeping";
   return "Idle";
 }
 
@@ -521,6 +558,8 @@ export default function KidFarmGame() {
     workers: [makeWorker("maya", "Maya", 10 * TILE + TILE / 2, 4 * TILE + TILE / 2, COLORS.hairBlonde, COLORS.shirtRed)],
     selectedWorkerId: "maya",
     cow: { x: COW_TILE.x * TILE + TILE / 2, y: COW_TILE.y * TILE + TILE / 2, lastMilkedDay: 0 } as Cow,
+    equipment: { manualPlow: false, tractor: false, harvester: false } as Equipment,
+    isNight: false,
   });
 
   const stateRef = useRef({
@@ -560,10 +599,13 @@ export default function KidFarmGame() {
     message: "Selected Worker: Maya. Click soil to prepare it.",
     banner: { text: `${SEASON_LABEL[initialSeason]} has arrived`, visible: true },
     cowReady: true,
+    isNight: false,
+    equipment: { manualPlow: false, tractor: false, harvester: false } as Equipment,
   });
 
   const [plantPrompt, setPlantPrompt] = useState<{ tx: number; ty: number } | null>(null);
   const [shopOpen, setShopOpen] = useState(false);
+  const [shopTab, setShopTab] = useState<"seeds" | "equipment" | "pesticides" | "land">("seeds");
   const [marketOpen, setMarketOpen] = useState(false);
   const [journalOpen, setJournalOpen] = useState(false);
 
@@ -624,6 +666,24 @@ export default function KidFarmGame() {
       && ty >= MILKING_PARLOR.y && ty < MILKING_PARLOR.y + MILKING_PARLOR.h;
   }
 
+  function getAffectedTiles(kind: TaskKind, tx: number, ty: number): { tx: number; ty: number }[] {
+    const s = stateRef.current;
+    const list: { tx: number; ty: number }[] = [];
+    const region = (kind === "prepare" && s.equipment.tractor) || (kind === "harvest" && s.equipment.harvester);
+    const candidates = region
+      ? [[0, 0], [1, 0], [0, 1], [1, 1]]
+      : [[0, 0]];
+    for (const [dx, dy] of candidates) {
+      const nx = tx + dx;
+      const ny = ty + dy;
+      if (!inField(nx, ny)) continue;
+      const f = s.fields[fieldIdx(nx, ny)];
+      if (kind === "prepare" && f.state === "empty") list.push({ tx: nx, ty: ny });
+      else if (kind === "harvest" && f.state === "ready" && f.crop) list.push({ tx: nx, ty: ny });
+    }
+    return list;
+  }
+
   const handleTileClick = useCallback((tx: number, ty: number) => {
     const s = stateRef.current;
     if (tx === SHIPPING_BIN.x && ty === SHIPPING_BIN.y) {
@@ -635,6 +695,10 @@ export default function KidFarmGame() {
       return;
     }
     if (inMilkingParlor(tx, ty)) {
+      if (s.isNight) {
+        setMessage("The cow is sleeping. Come back in the morning.");
+        return;
+      }
       if (s.cow.lastMilkedDay === s.day) {
         setMessage("The cow has already been milked today.");
         return;
@@ -646,13 +710,19 @@ export default function KidFarmGame() {
       setMessage("Click a worker to select, then click soil tiles, the cow, or the shipping bin.");
       return;
     }
+    if (s.isNight) {
+      setMessage("Workers are sleeping. Work resumes at 06:00.");
+      return;
+    }
     const field = s.fields[fieldIdx(tx, ty)];
     if (field.state === "empty") {
-      assignTask({ kind: "prepare", tx, ty });
+      const tiles = getAffectedTiles("prepare", tx, ty);
+      assignTask({ kind: "prepare", tx, ty, tiles });
     } else if (field.state === "prepared") {
       setPlantPrompt({ tx, ty });
     } else if (field.state === "ready" && field.crop) {
-      assignTask({ kind: "harvest", tx, ty, crop: field.crop });
+      const tiles = getAffectedTiles("harvest", tx, ty);
+      assignTask({ kind: "harvest", tx, ty, crop: field.crop, tiles });
     } else {
       setMessage("This crop is still growing.");
     }
@@ -705,26 +775,40 @@ export default function KidFarmGame() {
     }
 
     if (!inField(task.tx, task.ty)) return;
-    const field = s.fields[fieldIdx(task.tx, task.ty)];
-    if (task.kind === "prepare" && field.state === "empty") {
-      field.state = "prepared";
-    } else if (task.kind === "plant" && field.state === "prepared" && task.crop && s.seeds[task.crop] > 0) {
-      field.state = "planted";
-      field.growth = 0;
-      field.crop = task.crop;
-      // Lock growth duration based on CURRENT season at plant time.
-      field.growMs = cropGrowMs(task.crop, s.season);
-      s.seeds[task.crop] -= 1;
-      logJournal(`Planted ${CROPS[task.crop].name} (${GROW_DAYS[task.crop][s.season]}d)`);
-    } else if (task.kind === "harvest" && field.state === "ready" && field.crop) {
-      const def = CROPS[field.crop];
-      s.harvested[field.crop] += def.yield;
-      addFloater(worker.x, worker.y - 24, `+${def.yield} ${def.name}`, def.fruit);
-      logJournal(`Harvested ${def.yield} ${def.name}`);
-      field.state = "empty";
-      field.growth = 0;
-      field.growMs = 0;
-      field.crop = null;
+    const tiles = task.tiles && task.tiles.length > 0 ? task.tiles : [{ tx: task.tx, ty: task.ty }];
+
+    if (task.kind === "prepare") {
+      let prepared = 0;
+      for (const t of tiles) {
+        const f = s.fields[fieldIdx(t.tx, t.ty)];
+        if (f.state === "empty") { f.state = "prepared"; prepared += 1; }
+      }
+      if (prepared > 1) logJournal(`Tractor prepared ${prepared} tiles`);
+    } else if (task.kind === "plant") {
+      const f = s.fields[fieldIdx(task.tx, task.ty)];
+      if (f.state === "prepared" && task.crop && s.seeds[task.crop] > 0) {
+        f.state = "planted";
+        f.growth = 0;
+        f.crop = task.crop;
+        f.growMs = cropGrowMs(task.crop, s.season);
+        s.seeds[task.crop] -= 1;
+        logJournal(`Planted ${CROPS[task.crop].name} (${GROW_DAYS[task.crop][s.season]}d)`);
+      }
+    } else if (task.kind === "harvest") {
+      const totals: Partial<Record<CropId, number>> = {};
+      for (const t of tiles) {
+        const f = s.fields[fieldIdx(t.tx, t.ty)];
+        if (f.state === "ready" && f.crop) {
+          const def = CROPS[f.crop];
+          s.harvested[f.crop] += def.yield;
+          totals[f.crop] = (totals[f.crop] ?? 0) + def.yield;
+          f.state = "empty"; f.growth = 0; f.growMs = 0; f.crop = null;
+        }
+      }
+      for (const c of Object.keys(totals) as CropId[]) {
+        addFloater(worker.x, worker.y - 24, `+${totals[c]} ${CROPS[c].name}`, CROPS[c].fruit);
+        logJournal(`Harvested ${totals[c]} ${CROPS[c].name}${tiles.length > 1 ? " (Harvester)" : ""}`);
+      }
     }
   }
 
@@ -753,6 +837,7 @@ export default function KidFarmGame() {
       })),
       selectedWorkerId: s.selectedWorkerId,
       cow: s.cow,
+      equipment: s.equipment,
       nextTaskId: nextTaskId.current,
     };
   }
@@ -780,13 +865,14 @@ export default function KidFarmGame() {
       s.workers = (data.workers ?? []).map((w: { id: string; name: string; x: number; y: number; hair: string; shirt: string; facing?: Facing; queue?: Task[]; task?: Task | null }) => ({
         id: w.id, name: w.name, x: w.x, y: w.y, hair: w.hair, shirt: w.shirt,
         facing: (w.facing ?? "down") as Facing, queue: w.queue ?? [], task: w.task ?? null,
-        workTimer: 0, walkPhase: 0,
+        workTimer: 0, workTotal: 0, walkPhase: 0,
       }));
       if (s.workers.length === 0) {
         s.workers = [makeWorker("maya", "Maya", 10 * TILE + TILE / 2, 4 * TILE + TILE / 2, COLORS.hairBlonde, COLORS.shirtRed)];
       }
       s.selectedWorkerId = data.selectedWorkerId ?? s.workers[0].id;
       s.cow = data.cow ?? { x: COW_TILE.x * TILE + TILE / 2, y: COW_TILE.y * TILE + TILE / 2, lastMilkedDay: 0 };
+      s.equipment = { manualPlow: false, tractor: false, harvester: false, ...(data.equipment ?? {}) };
       nextTaskId.current = data.nextTaskId ?? 1;
       s.seasonBanner = { text: "", age: 9999, ttl: 1 };
       syncUi(true);
@@ -875,6 +961,13 @@ export default function KidFarmGame() {
       recordPriceHistory();
     }
 
+    const nightNow = isNightAt(s.dayMs);
+    if (nightNow !== s.isNight) {
+      s.isNight = nightNow;
+      if (nightNow) logJournal("Workers stopped for the night (20:00)");
+      else logJournal("Workers resumed in the morning (06:00)");
+    }
+
     if (s.seasonBanner) {
       s.seasonBanner.age += dt;
       if (s.seasonBanner.age >= s.seasonBanner.ttl && ui.banner.visible) {
@@ -896,7 +989,7 @@ export default function KidFarmGame() {
     }
 
     for (const worker of s.workers) {
-      if (!worker.task && worker.queue.length > 0) {
+      if (!worker.task && worker.queue.length > 0 && !s.isNight) {
         worker.task = worker.queue.shift() ?? null;
       }
       if (!worker.task) continue;
@@ -913,12 +1006,17 @@ export default function KidFarmGame() {
         worker.walkPhase += dt * 0.012;
         worker.facing = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : (dy > 0 ? "down" : "up");
       } else {
-        if (worker.workTimer === 0) worker.workTimer = WORK_MS;
+        if (worker.workTimer === 0) {
+          const dur = getTaskDuration(worker.task.kind, s.equipment);
+          worker.workTotal = dur;
+          worker.workTimer = dur;
+        }
         worker.workTimer -= dt;
         if (worker.workTimer <= 0) {
           completeTask(worker);
           worker.task = null;
           worker.workTimer = 0;
+          worker.workTotal = 0;
         }
       }
     }
@@ -962,7 +1060,7 @@ export default function KidFarmGame() {
     const workers = s.workers.map((worker) => ({
       id: worker.id,
       name: worker.name,
-      status: workerStatus(worker),
+      status: workerStatus(worker, s.isNight),
       currentTask: taskName(worker.task),
       queueLength: worker.queue.length,
       isSelected: worker.id === s.selectedWorkerId,
@@ -988,11 +1086,13 @@ export default function KidFarmGame() {
       prices,
       selectedWorkerId: selected.id,
       selectedWorkerName: selected.name,
-      selectedStatus: workerStatus(selected),
+      selectedStatus: workerStatus(selected, s.isNight),
       selectedCurrentTask: taskName(selected.task),
       selectedQueueLength: selected.queue.length,
       workers,
       cowReady: s.cow.lastMilkedDay !== s.day,
+      isNight: s.isNight,
+      equipment: { ...s.equipment },
     }));
   }
 
@@ -1109,9 +1209,9 @@ export default function KidFarmGame() {
     ctx.fillStyle = COLORS.white;
     ctx.fillText(status, worker.x, worker.y + 21);
 
-    if (worker.task && worker.workTimer > 0) {
+    if (worker.task && worker.workTimer > 0 && worker.workTotal > 0) {
       const width = 24;
-      const progress = clamp(1 - worker.workTimer / WORK_MS, 0, 1);
+      const progress = clamp(1 - worker.workTimer / worker.workTotal, 0, 1);
       px(ctx, worker.x - width / 2, worker.y + 25, width, 4, COLORS.black);
       px(ctx, worker.x - width / 2 + 1, worker.y + 26, Math.floor((width - 2) * progress), 2, COLORS.selected);
     }
@@ -1230,6 +1330,31 @@ export default function KidFarmGame() {
     syncUi(true);
   };
 
+  const equipmentRequirement = (id: EquipmentId): EquipmentId | null => {
+    if (id === "tractor") return "manualPlow";
+    if (id === "harvester") return "tractor";
+    return null;
+  };
+
+  const buyEquipment = (id: EquipmentId) => {
+    const s = stateRef.current;
+    if (s.equipment[id]) { setMessage(`${EQUIPMENT_LABELS[id]} already owned.`); return; }
+    const req = equipmentRequirement(id);
+    if (req && !s.equipment[req]) {
+      setMessage(`Requires ${EQUIPMENT_LABELS[req]} first.`);
+      return;
+    }
+    const cost = EQUIPMENT_PRICES[id];
+    if (s.coins < cost) { setMessage(`Need ${cost} coins for ${EQUIPMENT_LABELS[id]}.`); return; }
+    s.coins -= cost;
+    s.expenses += cost;
+    s.equipment[id] = true;
+    addFloater(FARMHOUSE.x * TILE, FARMHOUSE.y * TILE + 10, `-${cost}c`, COLORS.shirtRed);
+    setMessage(`Bought ${EQUIPMENT_LABELS[id]}.`);
+    logJournal(`Bought ${EQUIPMENT_LABELS[id]} (-${cost}c)`);
+    syncUi(true);
+  };
+
   const hireWorker = () => {
     const s = stateRef.current;
     const cost = HIRE_COST_BASE * s.workers.length;
@@ -1280,6 +1405,7 @@ export default function KidFarmGame() {
           <Chip label="Day" value={`${ui.day}`} swatch="#a9d8ef" />
           <Chip label="Season" value={`${seasonIcon[ui.season]} ${SEASON_LABEL[ui.season]}`} swatch={SEASON_TINT[ui.season]} />
           <Chip label="Time" value={ui.time} swatch="#fcdc70" />
+          <Chip label={ui.isNight ? "Night" : "Day"} value={ui.isNight ? "🌙 Sleeping" : "☀️ Working"} swatch={ui.isNight ? "#283058" : "#fff6a8"} />
           <Chip label="Selected" value={ui.selectedWorkerName} swatch="#fff06a" />
         </div>
       </header>
@@ -1330,33 +1456,94 @@ export default function KidFarmGame() {
 
           {shopOpen && (
             <div className="absolute inset-0 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.45)" }}>
-              <div className="pixel-panel p-3 flex flex-col gap-2" style={{ minWidth: 280, maxWidth: 440 }}>
+              <div className="pixel-panel p-3 flex flex-col gap-2" style={{ minWidth: 300, maxWidth: 460, maxHeight: "92%", overflow: "auto" }}>
                 <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 1 }}>Farm Supply Store</div>
-                <div style={{ fontSize: 8, opacity: 0.7 }}>Cost · Grow ({SEASON_LABEL[ui.season]}) · Sell now · Yield</div>
-                {CROP_ORDER.map((id) => {
-                  const def = CROPS[id];
-                  const days = GROW_DAYS[id][ui.season];
-                  const price = ui.prices[id];
-                  const projected = def.yield * price - def.seedCost;
-                  return (
-                    <div key={id} className="pixel-panel" style={{ padding: 6, display: "flex", flexDirection: "column", gap: 4 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10 }}>
-                        <strong>{def.name}</strong>
-                        <span>Own: {ui.seeds[id]}</span>
-                      </div>
-                      <div style={{ fontSize: 9, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2 }}>
-                        <span>Cost: {def.seedCost}c</span>
-                        <span>Grow: {days}d</span>
-                        <span>Sell: {price}c</span>
-                        <span style={{ color: projected > 0 ? "#2a7a2a" : "#c84a3a" }}>If sold now: {projected}c</span>
-                      </div>
-                      <div style={{ display: "flex", gap: 4 }}>
-                        <button className="pixel-btn" style={{ flex: 1 }} onClick={() => buySeeds(id, 1)}>Buy 1 · {def.seedCost}c</button>
-                        <button className="pixel-btn" style={{ flex: 1 }} onClick={() => buySeeds(id, 5)}>Buy 5 · {def.seedCost * 5}c</button>
-                      </div>
-                    </div>
-                  );
-                })}
+                <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                  {(["seeds", "equipment", "pesticides", "land"] as const).map((t) => (
+                    <button key={t} className={`pixel-btn ${shopTab === t ? "accent" : ""}`} style={{ flex: 1, fontSize: 9 }} onClick={() => setShopTab(t)}>
+                      {t.charAt(0).toUpperCase() + t.slice(1)}
+                    </button>
+                  ))}
+                </div>
+
+                {shopTab === "seeds" && (
+                  <>
+                    <div style={{ fontSize: 8, opacity: 0.7 }}>Cost · Grow ({SEASON_LABEL[ui.season]}) · Sell now · Yield</div>
+                    {CROP_ORDER.map((id) => {
+                      const def = CROPS[id];
+                      const days = GROW_DAYS[id][ui.season];
+                      const price = ui.prices[id];
+                      const projected = def.yield * price - def.seedCost;
+                      return (
+                        <div key={id} className="pixel-panel" style={{ padding: 6, display: "flex", flexDirection: "column", gap: 4 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10 }}>
+                            <strong>{def.name}</strong>
+                            <span>Own: {ui.seeds[id]}</span>
+                          </div>
+                          <div style={{ fontSize: 9, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2 }}>
+                            <span>Cost: {def.seedCost}c</span>
+                            <span>Grow: {days}d</span>
+                            <span>Sell: {price}c</span>
+                            <span style={{ color: projected > 0 ? "#2a7a2a" : "#c84a3a" }}>If sold now: {projected}c</span>
+                          </div>
+                          <div style={{ display: "flex", gap: 4 }}>
+                            <button className="pixel-btn" style={{ flex: 1 }} onClick={() => buySeeds(id, 1)}>Buy 1 · {def.seedCost}c</button>
+                            <button className="pixel-btn" style={{ flex: 1 }} onClick={() => buySeeds(id, 5)}>Buy 5 · {def.seedCost * 5}c</button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </>
+                )}
+
+                {shopTab === "equipment" && (
+                  <>
+                    <div style={{ fontSize: 8, opacity: 0.7 }}>Upgrade path: Manual Plow → Tractor → Harvester</div>
+                    {(["manualPlow", "tractor", "harvester"] as EquipmentId[]).map((id) => {
+                      const owned = ui.equipment[id];
+                      const req = equipmentRequirement(id);
+                      const reqMet = !req || ui.equipment[req];
+                      const cost = EQUIPMENT_PRICES[id];
+                      const effect = id === "manualPlow"
+                        ? "−35% Prepare Soil time"
+                        : id === "tractor"
+                          ? "−75% Prepare Soil + 2×2 area"
+                          : "−75% Harvest + 2×2 area";
+                      return (
+                        <div key={id} className="pixel-panel" style={{ padding: 6, display: "flex", flexDirection: "column", gap: 4 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10 }}>
+                            <strong>{EQUIPMENT_LABELS[id]}</strong>
+                            <span style={{ color: owned ? "#2a7a2a" : "#7a5a30" }}>{owned ? "Owned" : "Not owned"}</span>
+                          </div>
+                          <div style={{ fontSize: 9 }}>Price: {cost}c · {effect}</div>
+                          {req && !reqMet && (
+                            <div style={{ fontSize: 9, color: "#c84a3a" }}>Requires {EQUIPMENT_LABELS[req]}</div>
+                          )}
+                          <button
+                            className="pixel-btn"
+                            disabled={owned || !reqMet || ui.coins < cost}
+                            onClick={() => buyEquipment(id)}
+                          >
+                            {owned ? "Owned" : `Buy · ${cost}c`}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </>
+                )}
+
+                {shopTab === "pesticides" && (
+                  <div className="pixel-panel" style={{ padding: 10, fontSize: 10, textAlign: "center", opacity: 0.7 }}>
+                    Pesticides — Coming soon
+                  </div>
+                )}
+
+                {shopTab === "land" && (
+                  <div className="pixel-panel" style={{ padding: 10, fontSize: 10, textAlign: "center", opacity: 0.7 }}>
+                    Land Expansion — Coming soon
+                  </div>
+                )}
+
                 <button className="pixel-btn primary" onClick={() => setShopOpen(false)}>Close Shop</button>
               </div>
             </div>
@@ -1428,6 +1615,12 @@ export default function KidFarmGame() {
             <button className="pixel-btn primary" onClick={() => setShopOpen(true)}>Farm Supply Store</button>
             <button className="pixel-btn accent" onClick={() => setMarketOpen(true)}>Market & Prices</button>
             <button className="pixel-btn" onClick={() => setJournalOpen(true)}>Farm Journal</button>
+          </Panel>
+
+          <Panel title="Equipment">
+            {(["manualPlow", "tractor", "harvester"] as EquipmentId[]).map((id) => (
+              <StatusLine key={id} label={EQUIPMENT_LABELS[id]} value={ui.equipment[id] ? "Owned" : "Not owned"} />
+            ))}
           </Panel>
 
           <Panel title="Milking Parlor">
