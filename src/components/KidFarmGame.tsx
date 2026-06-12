@@ -660,6 +660,8 @@ export default function KidFarmGame() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const nextTaskId = useRef(1);
+  const farmhouseImgRef = useRef<HTMLImageElement | null>(null);
+  const farmhouseLoadedRef = useRef(false);
 
   const initialSeason = seasonForDay(1);
   const initialFluct: Record<ProductId, number> = { wheat: 0, rice: 0, corn: 0, banana: 0, milk: 0 };
@@ -1095,7 +1097,19 @@ export default function KidFarmGame() {
       window.removeEventListener("beforeunload", onBeforeUnload);
       saveGame();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const img = new Image();
+    img.src = "/src/assets/buildings/farmhouse.png";
+    img.onload = () => {
+      farmhouseImgRef.current = img;
+      farmhouseLoadedRef.current = true;
+    };
+    img.onerror = () => {
+      farmhouseLoadedRef.current = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -1338,7 +1352,11 @@ export default function KidFarmGame() {
     ctx.lineWidth = 1;
     ctx.strokeRect(FIELD_AREA.x0 * TILE + 0.5, FIELD_AREA.y0 * TILE + 0.5, (FIELD_AREA.x1 - FIELD_AREA.x0 + 1) * TILE - 1, (FIELD_AREA.y1 - FIELD_AREA.y0 + 1) * TILE - 1);
 
-    drawFarmhouse(ctx, FARMHOUSE.x * TILE, FARMHOUSE.y * TILE, FARMHOUSE.w * TILE, FARMHOUSE.h * TILE);
+    if (farmhouseLoadedRef.current && farmhouseImgRef.current) {
+      ctx.drawImage(farmhouseImgRef.current, FARMHOUSE.x * TILE, FARMHOUSE.y * TILE, FARMHOUSE.w * TILE, FARMHOUSE.h * TILE);
+    } else {
+      drawFarmhouse(ctx, FARMHOUSE.x * TILE, FARMHOUSE.y * TILE, FARMHOUSE.w * TILE, FARMHOUSE.h * TILE);
+    }
     drawRectBuilding(ctx, BARN.x * TILE, BARN.y * TILE, BARN.w * TILE, BARN.h * TILE, COLORS.roof, COLORS.roofDark);
     drawRectBuilding(ctx, COOP.x * TILE, COOP.y * TILE, COOP.w * TILE, COOP.h * TILE, COLORS.woodLight, COLORS.roof);
     drawRectBuilding(ctx, TOOLSHED.x * TILE, TOOLSHED.y * TILE, TOOLSHED.w * TILE, TOOLSHED.h * TILE, COLORS.wood, COLORS.stoneDark);
