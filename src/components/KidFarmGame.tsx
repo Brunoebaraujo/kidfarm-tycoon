@@ -97,13 +97,20 @@ function isNightAt(dayMs: number) {
   return dayMs / DAY_MS >= NIGHT_START_FRACTION;
 }
 
-function getTaskDuration(kind: TaskKind, equipment: Equipment) {
+const TRACTOR_PLANT_MAX = 10;
+
+function getTaskDuration(kind: TaskKind, equipment: Equipment, tileCount = 1) {
   let ms = TASK_MANUAL_MS[kind];
   if (kind === "prepare") {
     if (equipment.tractor) ms *= 0.25;
     else if (equipment.manualPlow) ms *= 0.65;
   } else if (kind === "harvest") {
     if (equipment.harvester) ms *= 0.25;
+  } else if (kind === "plant") {
+    if (equipment.tractor) {
+      // Tractor seeder: fast scatter, modest scaling with number of tiles.
+      ms = ms * 0.6 + tileCount * 180;
+    }
   }
   return Math.max(120, Math.round(ms));
 }
