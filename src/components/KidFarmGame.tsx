@@ -796,42 +796,42 @@ export default function KidFarmGame() {
 
   function getAffectedTiles(kind: TaskKind, tx: number, ty: number, crop?: CropId): { tx: number; ty: number }[] {
     const s = stateRef.current;
-    const list: { tx: number; ty: number }[] = [];
+    // For plant/prepare/harvest with the right vehicle, BFS outward from the
+    // clicked tile and collect up to N tiles matching the required state.
+    // This finds the N CLOSEST eligible tiles rather than a rigid 2x2 box.
+    let maxN = 1;
+    let want: FieldState | null = null;
     if (kind === "plant") {
-      if (!s.equipment.tractor || !crop) {
-        return [{ tx, ty }];
-      }
-      // Tractor seeder: BFS outward from clicked tile, collecting prepared tiles, up to seed count or TRACTOR_PLANT_MAX.
+      if (!s.equipment.tractor || !crop) return [{ tx, ty }];
       const seedsAvail = s.seeds[crop] ?? 0;
-      const maxN = Math.min(TRACTOR_PLANT_MAX, seedsAvail);
-      if (maxN <= 0) return [];
-      const seen = new Set<string>();
-      const queue: { tx: number; ty: number }[] = [{ tx, ty }];
-      while (queue.length > 0 && list.length < maxN) {
-        const cur = queue.shift()!;
-        const key = `${cur.tx},${cur.ty}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        if (!inField(cur.tx, cur.ty)) continue;
-        const f = s.fields[fieldIdx(cur.tx, cur.ty)];
-        if (f.state === "prepared") list.push(cur);
-        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-          queue.push({ tx: cur.tx + dx, ty: cur.ty + dy });
-        }
-      }
-      return list;
+      maxN = Math.min(TRACTOR_PLANT_MAX, seedsAvail);
+      want = "prepared";
+    } else if (kind === "prepare") {
+      if (!s.equipment.tractor) return [{ tx, ty }];
+      maxN = TRACTOR_PREPARE_MAX;
+      want = "empty";
+    } else if (kind === "harvest") {
+      if (!s.equipment.harvester) return [{ tx, ty }];
+      maxN = HARVESTER_MAX;
+      want = "ready";
+    } else {
+      return [{ tx, ty }];
     }
-    const region = (kind === "prepare" && s.equipment.tractor) || (kind === "harvest" && s.equipment.harvester);
-    const candidates = region
-      ? [[0, 0], [1, 0], [0, 1], [1, 1]]
-      : [[0, 0]];
-    for (const [dx, dy] of candidates) {
-      const nx = tx + dx;
-      const ny = ty + dy;
-      if (!inField(nx, ny)) continue;
-      const f = s.fields[fieldIdx(nx, ny)];
-      if (kind === "prepare" && f.state === "empty") list.push({ tx: nx, ty: ny });
-      else if (kind === "harvest" && f.state === "ready" && f.crop) list.push({ tx: nx, ty: ny });
+    if (maxN <= 0) return [];
+    const list: { tx: number; ty: number }[] = [];
+    const seen = new Set<string>();
+    const queue: { tx: number; ty: number }[] = [{ tx, ty }];
+    while (queue.length > 0 && list.length < maxN) {
+      const cur = queue.shift()!;
+      const key = `${cur.tx},${cur.ty}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (!inField(cur.tx, cur.ty)) continue;
+      const f = s.fields[fieldIdx(cur.tx, cur.ty)];
+      if (f.state === want && (kind !== "harvest" || f.crop)) list.push(cur);
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        queue.push({ tx: cur.tx + dx, ty: cur.ty + dy });
+      }
     }
     return list;
   }
