@@ -1664,7 +1664,7 @@ export default function KidFarmGame() {
                       const effect = id === "manualPlow"
                         ? "−35% Prepare Soil time"
                         : id === "tractor"
-                          ? "−75% Prepare Soil + 2×2 area"
+                          ? "−75% Prepare 2×2 · Sows up to 10 seeds at once"
                           : "−75% Harvest + 2×2 area";
                       return (
                         <div key={id} className="pixel-panel" style={{ padding: 6, display: "flex", flexDirection: "column", gap: 4 }}>
