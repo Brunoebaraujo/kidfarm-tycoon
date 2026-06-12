@@ -644,13 +644,15 @@ function drawTractorPlantOverlay(ctx: CanvasRenderingContext2D, worker: Worker, 
   px(ctx, x + 2, y - 18, 7, 5, "#6b4a2b");
   px(ctx, x + 2, y - 19, 7, 1, "#4a3220");
 
-  // Scattering seeds — animated falling specks ahead of tractor
-  const seedColors = ["#f5c530", "#e8a93a", "#c98a1a"];
-  for (let i = 0; i < 5; i++) {
-    const t = (phase + i * 1.1) % (Math.PI * 2);
-    const sx = x + 4 + Math.cos(t) * 6;
-    const sy = y + 2 + ((t * 3) % 6);
-    px(ctx, sx | 0, sy | 0, 1, 1, seedColors[i % seedColors.length]);
+  if (withSeeds) {
+    // Scattering seeds — animated falling specks ahead of tractor
+    const seedColors = ["#f5c530", "#e8a93a", "#c98a1a"];
+    for (let i = 0; i < 5; i++) {
+      const t = (phase + i * 1.1) % (Math.PI * 2);
+      const sx = x + 4 + Math.cos(t) * 6;
+      const sy = y + 2 + ((t * 3) % 6);
+      px(ctx, sx | 0, sy | 0, 1, 1, seedColors[i % seedColors.length]);
+    }
   }
 }
 
