@@ -98,6 +98,8 @@ function isNightAt(dayMs: number) {
 }
 
 const TRACTOR_PLANT_MAX = 10;
+const TRACTOR_PREPARE_MAX = 4;
+const HARVESTER_MAX = 4;
 
 function getTaskDuration(kind: TaskKind, equipment: Equipment, tileCount = 1) {
   let ms = TASK_MANUAL_MS[kind];
