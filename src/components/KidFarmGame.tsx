@@ -660,6 +660,8 @@ export default function KidFarmGame() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const nextTaskId = useRef(1);
+  const farmhouseImgRef = useRef<HTMLImageElement | null>(null);
+  const farmhouseLoadedRef = useRef(false);
 
   const initialSeason = seasonForDay(1);
   const initialFluct: Record<ProductId, number> = { wheat: 0, rice: 0, corn: 0, banana: 0, milk: 0 };
