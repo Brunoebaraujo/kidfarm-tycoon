@@ -572,7 +572,7 @@ function drawCow(ctx: CanvasRenderingContext2D, cx: number, cy: number, milked: 
   ctx.textAlign = "left";
 }
 
-function drawWorker(ctx: CanvasRenderingContext2D, worker: Worker, isSelected: boolean) {
+function drawWorker(ctx: CanvasRenderingContext2D, worker: Worker, isSelected: boolean, withTractorPlant = false) {
   const x = worker.x | 0;
   const y = worker.y | 0;
   ctx.fillStyle = COLORS.shadow;
@@ -605,6 +605,47 @@ function drawWorker(ctx: CanvasRenderingContext2D, worker: Worker, isSelected: b
   if (worker.facing !== "up") {
     px(ctx, worker.facing === "left" ? x - 3 : x - 2, top + 5, 1, 1, COLORS.black);
     px(ctx, worker.facing === "right" ? x + 2 : x + 1, top + 5, 1, 1, COLORS.black);
+  }
+
+  if (withTractorPlant) drawTractorPlantOverlay(ctx, worker);
+}
+
+function drawTractorPlantOverlay(ctx: CanvasRenderingContext2D, worker: Worker) {
+  const x = worker.x | 0;
+  const y = worker.y | 0;
+  const phase = (worker.walkPhase * 0.6) % (Math.PI * 2);
+  const wheelBob = Math.sin(phase * 4) > 0 ? 0 : 1;
+
+  // Tractor body behind/around the worker
+  // Red chassis
+  px(ctx, x - 12, y - 10, 8, 8, "#c0392b");
+  px(ctx, x - 11, y - 11, 6, 2, "#a83224");
+  // Engine block
+  px(ctx, x - 13, y - 7, 2, 4, "#7a2418");
+  // Exhaust stack with puff
+  px(ctx, x - 10, y - 16, 2, 5, "#2c2c2c");
+  const puffR = 2 + Math.sin(phase * 2) * 0.8;
+  ctx.fillStyle = "rgba(180,180,180,0.7)";
+  ctx.beginPath();
+  ctx.arc(x - 9, y - 18 - puffR, puffR, 0, Math.PI * 2);
+  ctx.fill();
+  // Wheels
+  px(ctx, x - 13, y - 2 + wheelBob, 4, 4, "#1a1a1a");
+  px(ctx, x - 6, y - 2 + wheelBob, 4, 4, "#1a1a1a");
+  px(ctx, x - 12, y - 1 + wheelBob, 2, 2, "#f5c530");
+  px(ctx, x - 5, y - 1 + wheelBob, 2, 2, "#f5c530");
+
+  // Seed hopper behind worker (above shoulders)
+  px(ctx, x + 2, y - 18, 7, 5, "#6b4a2b");
+  px(ctx, x + 2, y - 19, 7, 1, "#4a3220");
+
+  // Scattering seeds — animated falling specks ahead of tractor
+  const seedColors = ["#f5c530", "#e8a93a", "#c98a1a"];
+  for (let i = 0; i < 5; i++) {
+    const t = (phase + i * 1.1) % (Math.PI * 2);
+    const sx = x + 4 + Math.cos(t) * 6;
+    const sy = y + 2 + ((t * 3) % 6);
+    px(ctx, sx | 0, sy | 0, 1, 1, seedColors[i % seedColors.length]);
   }
 }
 
