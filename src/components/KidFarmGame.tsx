@@ -615,7 +615,7 @@ function drawWorker(ctx: CanvasRenderingContext2D, worker: Worker, isSelected: b
   if (onTruck) drawTractorPlantOverlay(ctx, worker, taskKind === "plant");
 }
 
-function drawTractorPlantOverlay(ctx: CanvasRenderingContext2D, worker: Worker) {
+function drawTractorPlantOverlay(ctx: CanvasRenderingContext2D, worker: Worker, withSeeds = true) {
   const x = worker.x | 0;
   const y = worker.y | 0;
   const phase = (worker.walkPhase * 0.6) % (Math.PI * 2);
