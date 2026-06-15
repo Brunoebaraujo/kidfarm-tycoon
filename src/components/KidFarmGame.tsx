@@ -1606,116 +1606,140 @@ export default function KidFarmGame() {
   const dayPct = Math.min(100, Math.floor((stateRef.current.dayMs / DAY_MS) * 100));
   const seasonIcon: Record<Season, string> = { spring: "🌸", summer: "☀️", autumn: "🍂", winter: "❄️" };
 
+
+  const dayPct = Math.min(100, Math.floor((stateRef.current.dayMs / DAY_MS) * 100));
+  const seasonIcon: Record<Season, string> = { spring: "🌸", summer: "☀️", autumn: "🍂", winter: "❄️" };
+  const profit = ui.revenue - ui.expenses;
+
   return (
-    <div className="min-h-screen w-full flex flex-col" style={{ background: "linear-gradient(180deg, #a9d8ef 0%, #7ec84a 60%)" }}>
-      <header className="px-3 py-2 flex flex-wrap gap-2 items-center justify-between" style={{ borderBottom: "3px solid var(--color-border)" }}>
-        <div className="flex items-center gap-2 flex-wrap">
-          <h1 className="pixel-chip" style={{ background: "var(--color-primary)", color: "var(--color-primary-foreground)", border: "2px solid var(--color-border)" }}>
-            KidFarm
-          </h1>
-          <Chip label="Coins" value={`${ui.coins}c`} swatch="#f5c530" />
-          <Chip label="Revenue" value={`${ui.revenue}c`} swatch="#3aa860" />
-          <Chip label="Expenses" value={`${ui.expenses}c`} swatch="#c84a3a" />
-          <Chip label="Profit" value={`${ui.revenue - ui.expenses}c`} swatch={ui.revenue - ui.expenses >= 0 ? "#3aa860" : "#c84a3a"} />
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <Chip label="Day" value={`${ui.day}`} swatch="#a9d8ef" />
-          <Chip label="Season" value={`${seasonIcon[ui.season]} ${SEASON_LABEL[ui.season]}`} swatch={SEASON_TINT[ui.season]} />
-          <Chip label="Time" value={ui.time} swatch="#fcdc70" />
-          <Chip label={ui.isNight ? "Night" : "Day"} value={ui.isNight ? "🌙 Sleeping" : "☀️ Working"} swatch={ui.isNight ? "#283058" : "#fff6a8"} />
-          <Chip label="Selected" value={ui.selectedWorkerName} swatch="#fff06a" />
-        </div>
+    <div className="min-h-screen w-full flex flex-col" style={{ background: "#0e0b07" }}>
+
+      {/* ── TOP RESOURCE BAR ─────────────────────────────────── */}
+      <header className="aoe-topbar">
+        <span style={{ fontFamily: "'Cinzel', serif", fontSize: 14, fontWeight: 700, color: "var(--aoe-gold-light)", letterSpacing: 2, marginRight: 8, textShadow: "0 2px 6px rgba(200,150,12,0.5)" }}>
+          KidFarm
+        </span>
+        <div className="aoe-topbar-divider" />
+
+        <AoeResource icon="🪙" label="Coins"    value={`${ui.coins}`}    />
+        <AoeResource icon="📈" label="Revenue"  value={`${ui.revenue}`}  color="#7ad060" />
+        <AoeResource icon="📉" label="Expenses" value={`${ui.expenses}`} color="#e05030" />
+        <AoeResource icon="💰" label="Profit"   value={`${profit}`}      color={profit >= 0 ? "#7ad060" : "#e05030"} />
+        <div className="aoe-topbar-divider" />
+        <AoeResource icon="📅" label="Day"      value={`${ui.day}`} />
+        <AoeResource icon={seasonIcon[ui.season]} label="Season" value={SEASON_LABEL[ui.season]} />
+        <AoeResource icon="🕐" label="Time"     value={ui.time} />
+        <AoeResource icon={ui.isNight ? "🌙" : "☀️"} label="Phase" value={ui.isNight ? "Night" : "Day"} />
+        <div className="aoe-topbar-divider" />
+        <AoeResource icon="⚔️" label="Worker"  value={ui.selectedWorkerName} color="var(--aoe-gold-light)" />
       </header>
 
-      <div className="flex-1 flex flex-col lg:flex-row gap-2 p-2">
+      {/* ── MAIN LAYOUT ──────────────────────────────────────── */}
+      <div className="flex-1 flex flex-col lg:flex-row gap-2 p-2" style={{ minHeight: 0 }}>
+
+        {/* MAP CANVAS */}
         <div ref={wrapRef} className="relative flex-1 overflow-hidden pixel-panel" style={{ minHeight: 380 }}>
           <canvas ref={canvasRef} className="pixel-canvas w-full h-full" />
-          <div className="absolute left-2 right-2 bottom-2 h-3" style={{ border: "2px solid var(--color-border)", borderRadius: 4, background: "rgba(255,255,255,0.6)" }}>
-            <div style={{ width: `${dayPct}%`, height: "100%", background: "linear-gradient(90deg,#fcdc70,#f5c530)", borderRadius: 2 }} />
-          </div>
-          <div className="absolute left-2 top-2 max-w-[80%] pixel-panel" style={{ padding: "6px 8px", fontSize: 10 }}>
-            {ui.message}
+
+          {/* Day progress bar */}
+          <div className="aoe-daybar-wrap">
+            <div className="aoe-daybar-fill" style={{ width: `${dayPct}%` }} />
           </div>
 
+          {/* Status message */}
+          <div className="aoe-message">{ui.message}</div>
+
+          {/* Season banner */}
           {ui.banner.visible && (
-            <div className="absolute left-1/2 top-6 -translate-x-1/2 pixel-panel animate-fade-in" style={{ padding: "8px 14px", fontSize: 12, background: SEASON_TINT[ui.season] }}>
+            <div className="aoe-banner animate-fade-in">
               {seasonIcon[ui.season]} {ui.banner.text}
             </div>
           )}
 
+          {/* Plant chooser modal */}
           {plantPrompt && (
-            <div className="absolute inset-0 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.45)" }}>
-              <div className="pixel-panel p-3 flex flex-col gap-2" style={{ minWidth: 280, maxWidth: 380 }}>
-                <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 1 }}>
-                  Plant What? · {SEASON_LABEL[ui.season]}
+            <div className="aoe-modal-overlay">
+              <div className="aoe-modal" style={{ minWidth: 300, maxWidth: 400 }}>
+                <div className="aoe-modal-title">⚔ Plant Crop — {SEASON_LABEL[ui.season]}</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {CROP_ORDER.map((id) => {
+                    const def = CROPS[id];
+                    const owned = ui.seeds[id];
+                    const days = GROW_DAYS[id][ui.season];
+                    const price = ui.prices[id];
+                    const projected = def.yield * price - def.seedCost;
+                    return (
+                      <button key={id} className="pixel-btn" disabled={owned <= 0} onClick={() => choosePlant(id)}
+                        style={{ textAlign: "left", padding: "8px 12px" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+                          <span style={{ fontFamily: "'Cinzel',serif", fontSize: 11 }}>{def.name}</span>
+                          <span style={{ color: "var(--aoe-text-muted)", fontSize: 10 }}>Seeds: {owned}</span>
+                        </div>
+                        <div style={{ fontSize: 9, color: "var(--aoe-text-muted)", display: "flex", gap: 12 }}>
+                          <span>{days}d to grow</span>
+                          <span>Sells {price}c</span>
+                          <span style={{ color: projected > 0 ? "#7ad060" : "#e05030" }}>Profit: {projected}c</span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                  <button className="pixel-btn" onClick={() => setPlantPrompt(null)}
+                    style={{ marginTop: 4, color: "var(--aoe-text-muted)" }}>Cancel</button>
                 </div>
-                {CROP_ORDER.map((id) => {
-                  const def = CROPS[id];
-                  const owned = ui.seeds[id];
-                  const days = GROW_DAYS[id][ui.season];
-                  const price = ui.prices[id];
-                  return (
-                    <button key={id} className="pixel-btn" disabled={owned <= 0} onClick={() => choosePlant(id)} style={{ textAlign: "left" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-                        <span>{def.name}</span>
-                        <span>Seeds: {owned}</span>
-                      </div>
-                      <div style={{ fontSize: 8, opacity: 0.8, marginTop: 2 }}>
-                        {days}d in {SEASON_LABEL[ui.season]} · sells {price}c · yield {def.yield}
-                      </div>
-                    </button>
-                  );
-                })}
-                <button className="pixel-btn" onClick={() => setPlantPrompt(null)}>Cancel</button>
               </div>
             </div>
           )}
 
+          {/* Shop modal */}
           {shopOpen && (
-            <div className="absolute inset-0 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.45)" }}>
-              <div className="pixel-panel p-3 flex flex-col gap-2" style={{ minWidth: 300, maxWidth: 460, maxHeight: "92%", overflow: "auto" }}>
-                <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 1 }}>Farm Supply Store</div>
-                <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+            <div className="aoe-modal-overlay">
+              <div className="aoe-modal" style={{ minWidth: 320, maxWidth: 480 }}>
+                <div className="aoe-modal-title">🏪 Farm Supply Store</div>
+                <div className="aoe-tabs" style={{ marginBottom: 10 }}>
                   {(["seeds", "equipment", "pesticides", "land"] as const).map((t) => (
-                    <button key={t} className={`pixel-btn ${shopTab === t ? "accent" : ""}`} style={{ flex: 1, fontSize: 9 }} onClick={() => setShopTab(t)}>
+                    <button key={t} className={`aoe-tab ${shopTab === t ? "active" : ""}`} onClick={() => setShopTab(t)}>
                       {t.charAt(0).toUpperCase() + t.slice(1)}
                     </button>
                   ))}
                 </div>
 
                 {shopTab === "seeds" && (
-                  <>
-                    <div style={{ fontSize: 8, opacity: 0.7 }}>Cost · Grow ({SEASON_LABEL[ui.season]}) · Sell now · Yield</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <div style={{ fontSize: 9, color: "var(--aoe-text-muted)", marginBottom: 2 }}>
+                      Prices shown for {SEASON_LABEL[ui.season]} — seasons change crop value.
+                    </div>
                     {CROP_ORDER.map((id) => {
                       const def = CROPS[id];
                       const days = GROW_DAYS[id][ui.season];
                       const price = ui.prices[id];
                       const projected = def.yield * price - def.seedCost;
                       return (
-                        <div key={id} className="pixel-panel" style={{ padding: 6, display: "flex", flexDirection: "column", gap: 4 }}>
-                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10 }}>
-                            <strong>{def.name}</strong>
-                            <span>Own: {ui.seeds[id]}</span>
+                        <div key={id} className="aoe-item-card">
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <span className="aoe-item-name">{def.name}</span>
+                            <span style={{ fontSize: 10, color: "var(--aoe-text-muted)" }}>Own: {ui.seeds[id]}</span>
                           </div>
-                          <div style={{ fontSize: 9, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2 }}>
-                            <span>Cost: {def.seedCost}c</span>
+                          <div className="aoe-item-grid">
+                            <span>Cost: {def.seedCost}c/seed</span>
                             <span>Grow: {days}d</span>
                             <span>Sell: {price}c</span>
-                            <span style={{ color: projected > 0 ? "#2a7a2a" : "#c84a3a" }}>If sold now: {projected}c</span>
+                            <span className={projected > 0 ? "profit-pos" : "profit-neg"}>Margin: {projected}c</span>
                           </div>
-                          <div style={{ display: "flex", gap: 4 }}>
+                          <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
                             <button className="pixel-btn" style={{ flex: 1 }} onClick={() => buySeeds(id, 1)}>Buy 1 · {def.seedCost}c</button>
-                            <button className="pixel-btn" style={{ flex: 1 }} onClick={() => buySeeds(id, 5)}>Buy 5 · {def.seedCost * 5}c</button>
+                            <button className="pixel-btn primary" style={{ flex: 1 }} onClick={() => buySeeds(id, 5)}>Buy 5 · {def.seedCost * 5}c</button>
                           </div>
                         </div>
                       );
                     })}
-                  </>
+                  </div>
                 )}
 
                 {shopTab === "equipment" && (
-                  <>
-                    <div style={{ fontSize: 8, opacity: 0.7 }}>Upgrade path: Manual Plow → Tractor → Harvester</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <div style={{ fontSize: 9, color: "var(--aoe-text-muted)", marginBottom: 2 }}>
+                      Upgrade path: Manual Plow → Tractor → Harvester
+                    </div>
                     {(["manualPlow", "tractor", "harvester"] as EquipmentId[]).map((id) => {
                       const owned = ui.equipment[id];
                       const req = equipmentRequirement(id);
@@ -1724,165 +1748,208 @@ export default function KidFarmGame() {
                       const effect = id === "manualPlow"
                         ? "−35% Prepare Soil time"
                         : id === "tractor"
-                          ? "−75% Prepare 2×2 · Sows up to 10 seeds at once"
-                          : "−75% Harvest + 2×2 area";
+                          ? "−75% Prepare · Sows up to 10 seeds at once"
+                          : "−75% Harvest · 2×2 area";
                       return (
-                        <div key={id} className="pixel-panel" style={{ padding: 6, display: "flex", flexDirection: "column", gap: 4 }}>
-                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10 }}>
-                            <strong>{EQUIPMENT_LABELS[id]}</strong>
-                            <span style={{ color: owned ? "#2a7a2a" : "#7a5a30" }}>{owned ? "Owned" : "Not owned"}</span>
+                        <div key={id} className="aoe-item-card">
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <span className="aoe-item-name">{EQUIPMENT_LABELS[id]}</span>
+                            <span style={{ fontSize: 10, color: owned ? "#7ad060" : "var(--aoe-text-muted)" }}>
+                              {owned ? "✓ Owned" : `${cost}c`}
+                            </span>
                           </div>
-                          <div style={{ fontSize: 9 }}>Price: {cost}c · {effect}</div>
+                          <div className="aoe-item-desc">{effect}</div>
                           {req && !reqMet && (
-                            <div style={{ fontSize: 9, color: "#c84a3a" }}>Requires {EQUIPMENT_LABELS[req]}</div>
+                            <div style={{ fontSize: 9, color: "#e05030" }}>Requires {EQUIPMENT_LABELS[req]}</div>
                           )}
-                          <button
-                            className="pixel-btn"
+                          <button className="pixel-btn primary" style={{ marginTop: 4 }}
                             disabled={owned || !reqMet || ui.coins < cost}
-                            onClick={() => buyEquipment(id)}
-                          >
-                            {owned ? "Owned" : `Buy · ${cost}c`}
+                            onClick={() => buyEquipment(id)}>
+                            {owned ? "Owned" : `Purchase · ${cost}c`}
                           </button>
                         </div>
                       );
                     })}
-                  </>
+                  </div>
                 )}
 
                 {shopTab === "pesticides" && (
-                  <div className="pixel-panel" style={{ padding: 10, fontSize: 10, textAlign: "center", opacity: 0.7 }}>
-                    Pesticides — Coming soon
+                  <div className="aoe-item-card" style={{ textAlign: "center", padding: 20 }}>
+                    <div className="aoe-item-name" style={{ marginBottom: 6 }}>Pesticides</div>
+                    <div className="aoe-item-desc">Coming in a future season.</div>
                   </div>
                 )}
 
                 {shopTab === "land" && (
-                  <div className="pixel-panel" style={{ padding: 10, fontSize: 10, textAlign: "center", opacity: 0.7 }}>
-                    Land Expansion — Coming soon
+                  <div className="aoe-item-card" style={{ textAlign: "center", padding: 20 }}>
+                    <div className="aoe-item-name" style={{ marginBottom: 6 }}>Land Expansion</div>
+                    <div className="aoe-item-desc">Coming in a future season.</div>
                   </div>
                 )}
 
-                <button className="pixel-btn primary" onClick={() => setShopOpen(false)}>Close Shop</button>
+                <button className="pixel-btn primary" style={{ marginTop: 10, width: "100%" }} onClick={() => setShopOpen(false)}>
+                  Close Store
+                </button>
               </div>
             </div>
           )}
 
+          {/* Market modal */}
           {marketOpen && (
-            <div className="absolute inset-0 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.45)" }}>
-              <div className="pixel-panel p-3 flex flex-col gap-2" style={{ minWidth: 320, maxWidth: 480, maxHeight: "90%", overflow: "auto" }}>
-                <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 1 }}>Market · {SEASON_LABEL[ui.season]}</div>
-                <div style={{ fontSize: 8, opacity: 0.7 }}>Last {HISTORY_DAYS} days of prices.</div>
-                {PRODUCT_ORDER.map((id) => {
-                  const hist = stateRef.current.history[id];
-                  const color = id === "milk" ? "#fdf6e3" : CROPS[id].fruit;
-                  return (
-                    <div key={id} className="pixel-panel" style={{ padding: 6 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10 }}>
-                        <strong>{productName(id)}</strong>
-                        <span>Now: {ui.prices[id]}c</span>
+            <div className="aoe-modal-overlay">
+              <div className="aoe-modal" style={{ minWidth: 340, maxWidth: 500 }}>
+                <div className="aoe-modal-title">📊 Market — {SEASON_LABEL[ui.season]}</div>
+                <div style={{ fontSize: 9, color: "var(--aoe-text-muted)", marginBottom: 10 }}>
+                  Price history for the last {HISTORY_DAYS} days. Prices vary by season and daily fluctuation.
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {PRODUCT_ORDER.map((id) => {
+                    const hist = stateRef.current.history[id];
+                    const color = id === "milk" ? "#f0e0a0" : CROPS[id as CropId]?.fruit ?? "#f0c030";
+                    return (
+                      <div key={id} className="aoe-item-card">
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                          <span className="aoe-item-name">{productName(id)}</span>
+                          <span style={{ color: "var(--aoe-gold-light)", fontFamily: "'Cinzel',serif", fontSize: 13, fontWeight: 700 }}>
+                            {ui.prices[id]}c
+                          </span>
+                        </div>
+                        <MiniChart data={hist} color={color} />
                       </div>
-                      <MiniChart data={hist} color={color} />
-                    </div>
-                  );
-                })}
-                <button className="pixel-btn primary" onClick={() => setMarketOpen(false)}>Close</button>
+                    );
+                  })}
+                </div>
+                <button className="pixel-btn primary" style={{ marginTop: 10, width: "100%" }} onClick={() => setMarketOpen(false)}>
+                  Close
+                </button>
               </div>
             </div>
           )}
 
+          {/* Journal modal */}
           {journalOpen && (
-            <div className="absolute inset-0 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.45)" }}>
-              <div className="pixel-panel p-3 flex flex-col gap-2" style={{ minWidth: 320, maxWidth: 480, maxHeight: "90%" }}>
-                <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 1 }}>Farm Journal</div>
-                <div style={{ fontSize: 8, opacity: 0.7 }}>Latest {JOURNAL_MAX} events.</div>
-                <div style={{ overflow: "auto", maxHeight: 360, display: "flex", flexDirection: "column", gap: 2 }}>
-                  {stateRef.current.journal.length === 0 && <div style={{ fontSize: 9 }}>No events yet.</div>}
+            <div className="aoe-modal-overlay">
+              <div className="aoe-modal" style={{ minWidth: 340, maxWidth: 500, maxHeight: "88%" }}>
+                <div className="aoe-modal-title">📜 Farm Journal</div>
+                <div style={{ overflow: "auto", maxHeight: 380, display: "flex", flexDirection: "column", gap: 0 }}>
+                  {stateRef.current.journal.length === 0 && (
+                    <div style={{ fontSize: 10, color: "var(--aoe-text-muted)", padding: "12px 0" }}>No events recorded yet.</div>
+                  )}
                   {stateRef.current.journal.map((e, i) => (
-                    <div key={i} style={{ fontSize: 9, padding: "3px 4px", borderBottom: "1px dashed rgba(0,0,0,0.15)" }}>
-                      <strong>Day {e.day}</strong> <span style={{ opacity: 0.6 }}>({SEASON_LABEL[e.season]})</span> — {e.text}
+                    <div key={i} className="aoe-journal-entry">
+                      <span className="aoe-journal-day">Day {e.day} · {SEASON_LABEL[e.season]}</span>
+                      {e.text}
                     </div>
                   ))}
                 </div>
-                <button className="pixel-btn primary" onClick={() => setJournalOpen(false)}>Close</button>
+                <button className="pixel-btn primary" style={{ marginTop: 10, width: "100%" }} onClick={() => setJournalOpen(false)}>
+                  Close
+                </button>
               </div>
             </div>
           )}
         </div>
 
-        <aside className="lg:w-[320px] flex flex-col gap-2">
-          <Panel title="Selected Worker">
-            <StatusLine label="Name" value={ui.selectedWorkerName} />
-            <StatusLine label="Status" value={ui.selectedStatus} />
-            <StatusLine label="Task" value={ui.selectedCurrentTask} />
-            <StatusLine label="Queue" value={`${ui.selectedQueueLength}`} />
-          </Panel>
+        {/* ── RIGHT SIDE PANEL ───────────────────────────────── */}
+        <aside className="lg:w-[300px] flex flex-col gap-2" style={{ overflowY: "auto" }}>
 
-          <Panel title="Workers">
-            {ui.workers.map((worker) => (
-              <div key={worker.id} className="flex gap-2 items-stretch">
-                <button className={`pixel-btn flex-1 ${worker.isSelected ? "accent" : ""}`} onClick={() => selectWorker(worker.id)}>
-                  {worker.name}<br />{worker.status} / Queue {worker.queueLength}
-                </button>
-                <button className="pixel-btn" onClick={() => centerOnWorker(worker.id)}>Find</button>
-              </div>
-            ))}
-            <button className="pixel-btn primary" onClick={hireWorker}>Hire Worker - {HIRE_COST_BASE * ui.workers.length}c</button>
-          </Panel>
+          <AoePanel title="Selected Unit">
+            <AoeStatusLine label="Name"   value={ui.selectedWorkerName} />
+            <AoeStatusLine label="Status" value={ui.selectedStatus} />
+            <AoeStatusLine label="Task"   value={ui.selectedCurrentTask} />
+            <AoeStatusLine label="Queued" value={`${ui.selectedQueueLength} task${ui.selectedQueueLength !== 1 ? "s" : ""}`} />
+          </AoePanel>
 
-          <Panel title="Shops & Logs">
-            <button className="pixel-btn primary" onClick={() => setShopOpen(true)}>Farm Supply Store</button>
-            <button className="pixel-btn accent" onClick={() => setMarketOpen(true)}>Market & Prices</button>
-            <button className="pixel-btn" onClick={() => setJournalOpen(true)}>Farm Journal</button>
-          </Panel>
-
-          <Panel title="Equipment">
-            {(["manualPlow", "tractor", "harvester"] as EquipmentId[]).map((id) => (
-              <StatusLine key={id} label={EQUIPMENT_LABELS[id]} value={ui.equipment[id] ? "Owned" : "Not owned"} />
-            ))}
-          </Panel>
-
-          <Panel title="Milking Parlor">
-            <StatusLine label="Cow" value={ui.cowReady ? "Ready to milk" : "Milked today"} />
-            <div style={{ fontSize: 9, opacity: 0.7 }}>
-              Click the cow with a worker selected to queue a Milk Cow task (+{MILK_YIELD} Milk).
+          <AoePanel title="Workers">
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              {ui.workers.map((worker) => (
+                <div key={worker.id} className={`aoe-worker-card ${worker.isSelected ? "selected" : ""}`}>
+                  <button className="pixel-btn flex-1" style={{ border: "none", borderRadius: 0, textAlign: "left", flex: 1 }}
+                    onClick={() => selectWorker(worker.id)}>
+                    <div style={{ fontFamily: "'Cinzel',serif", fontSize: 11, color: worker.isSelected ? "var(--aoe-gold-light)" : "var(--aoe-text-light)" }}>
+                      {worker.name}
+                    </div>
+                    <div style={{ fontSize: 9, color: "var(--aoe-text-muted)", marginTop: 1 }}>
+                      {worker.status} · Queue: {worker.queueLength}
+                    </div>
+                  </button>
+                  <button className="pixel-btn" style={{ borderRadius: 0, fontSize: 9, padding: "0 10px" }}
+                    onClick={() => centerOnWorker(worker.id)}>Find</button>
+                </div>
+              ))}
             </div>
-          </Panel>
+            <button className="pixel-btn primary" style={{ width: "100%", marginTop: 2 }} onClick={hireWorker}>
+              + Hire Worker — {HIRE_COST_BASE * ui.workers.length}c
+            </button>
+          </AoePanel>
 
-          <Panel title="Current Prices">
-            {PRODUCT_ORDER.map((id) => (
-              <StatusLine key={`price-${id}`} label={productName(id)} value={`${ui.prices[id]}c`} />
+          <AoePanel title="Actions">
+            <button className="pixel-btn primary" style={{ width: "100%", marginBottom: 4 }} onClick={() => setShopOpen(true)}>
+              🏪 Farm Supply Store
+            </button>
+            <button className="pixel-btn accent" style={{ width: "100%", marginBottom: 4 }} onClick={() => setMarketOpen(true)}>
+              📊 Market &amp; Prices
+            </button>
+            <button className="pixel-btn" style={{ width: "100%" }} onClick={() => setJournalOpen(true)}>
+              📜 Farm Journal
+            </button>
+          </AoePanel>
+
+          <AoePanel title="Equipment">
+            {(["manualPlow", "tractor", "harvester"] as EquipmentId[]).map((id) => (
+              <AoeStatusLine key={id} label={EQUIPMENT_LABELS[id]}
+                value={ui.equipment[id] ? "✓ Owned" : "Not owned"}
+                valueColor={ui.equipment[id] ? "#7ad060" : undefined} />
             ))}
-          </Panel>
+          </AoePanel>
 
-          <Panel title="Inventory">
-            <div style={{ fontSize: 9, opacity: 0.7, textTransform: "uppercase", letterSpacing: 1 }}>Seeds</div>
+          <AoePanel title="Milking Parlor">
+            <AoeStatusLine label="Cow status"
+              value={ui.cowReady ? "Ready to milk" : "Milked today"}
+              valueColor={ui.cowReady ? "#7ad060" : "var(--aoe-text-muted)"} />
+            <div style={{ fontSize: 9, color: "var(--aoe-text-muted)", lineHeight: 1.6, marginTop: 2 }}>
+              Select a worker, then click the cow to queue milking (+{MILK_YIELD} Milk).
+            </div>
+          </AoePanel>
+
+          <AoePanel title="Market Prices">
+            {PRODUCT_ORDER.map((id) => (
+              <AoeStatusLine key={`price-${id}`} label={productName(id)} value={`${ui.prices[id]}c`} />
+            ))}
+          </AoePanel>
+
+          <AoePanel title="Inventory">
+            <div style={{ fontSize: 9, color: "var(--aoe-gold-dark)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 3 }}>
+              Seeds
+            </div>
             {CROP_ORDER.map((id) => (
-              <StatusLine key={`seed-${id}`} label={CROPS[id].name} value={`${ui.seeds[id]}`} />
+              <AoeStatusLine key={`seed-${id}`} label={CROPS[id].name} value={`${ui.seeds[id]}`} />
             ))}
-            <div style={{ fontSize: 9, opacity: 0.7, textTransform: "uppercase", letterSpacing: 1, marginTop: 4 }}>Harvested</div>
+            <div style={{ fontSize: 9, color: "var(--aoe-gold-dark)", textTransform: "uppercase", letterSpacing: 1, marginTop: 6, marginBottom: 3 }}>
+              Harvested
+            </div>
             {PRODUCT_ORDER.map((id) => (
-              <StatusLine key={`harv-${id}`} label={productName(id)} value={`${ui.harvested[id]}`} />
+              <AoeStatusLine key={`harv-${id}`} label={productName(id)} value={`${ui.harvested[id]}`} />
             ))}
-          </Panel>
+          </AoePanel>
 
-          <Panel title="How to Play">
-            <ol style={{ fontSize: 9, lineHeight: 1.6, paddingLeft: 14 }}>
+          <AoePanel title="How to Play">
+            <ol style={{ fontSize: 10, lineHeight: 1.8, paddingLeft: 16, color: "var(--aoe-text-light)" }}>
               <li>Click a worker to select them.</li>
               <li>Click empty soil to prepare it.</li>
               <li>Click prepared soil to choose a crop.</li>
               <li>Click the cow to milk it (once per day).</li>
-              <li>Click ripe crops, then the shipping bin to sell.</li>
+              <li>Click ripe crops, then the shipping bin.</li>
             </ol>
-            <div style={{ fontSize: 9, opacity: 0.7 }}>Drag map or use arrow keys/WASD to pan.</div>
-            <button
-              className="pixel-btn"
-              style={{ background: "var(--color-destructive)", color: "#fff" }}
-              onClick={() => {
-                if (window.confirm("Reset your farm? This deletes saved progress.")) resetGame();
-              }}
-            >
-              Reset Game
+            <div style={{ fontSize: 9, color: "var(--aoe-text-muted)", marginTop: 4 }}>
+              Drag map or use arrow keys / WASD to pan.
+            </div>
+            <button className="pixel-btn" style={{ width: "100%", marginTop: 6, background: "rgba(120,20,10,0.6)", borderColor: "#8a2010", color: "#ffb0a0" }}
+              onClick={() => { if (window.confirm("Reset your farm? This deletes all saved progress.")) resetGame(); }}>
+              ⚠ Reset Farm
             </button>
-          </Panel>
+          </AoePanel>
+
         </aside>
       </div>
     </div>
@@ -1891,54 +1958,56 @@ export default function KidFarmGame() {
 
 function MiniChart({ data, color }: { data: { day: number; price: number }[]; color: string }) {
   const w = 280;
-  const h = 60;
-  if (data.length === 0) return <div style={{ fontSize: 9 }}>No data</div>;
+  const h = 56;
+  if (data.length === 0) return <div style={{ fontSize: 9, color: "var(--aoe-text-muted)" }}>No data yet.</div>;
   const prices = data.map((d) => d.price);
   const min = Math.min(...prices);
   const max = Math.max(...prices);
   const range = Math.max(1, max - min);
   const step = data.length > 1 ? w / (data.length - 1) : 0;
-  const points = data.map((d, i) => `${i * step},${h - ((d.price - min) / range) * (h - 8) - 4}`).join(" ");
+  const points = data.map((d, i) => `${i * step},${h - ((d.price - min) / range) * (h - 10) - 5}`).join(" ");
   return (
-    <div style={{ marginTop: 4 }}>
-      <svg width={w} height={h} style={{ background: "rgba(0,0,0,0.06)", border: "1px solid var(--color-border)", display: "block", maxWidth: "100%" }}>
-        <polyline points={points} fill="none" stroke={color} strokeWidth={2} />
+    <div className="aoe-chart-wrap">
+      <svg width={w} height={h} style={{ maxWidth: "100%" }}>
+        <polyline points={points} fill="none" stroke={color} strokeWidth={1.5} strokeLinejoin="round" />
         {data.map((d, i) => (
-          <circle key={i} cx={i * step} cy={h - ((d.price - min) / range) * (h - 8) - 4} r={1.5} fill={color} />
+          <circle key={i} cx={i * step} cy={h - ((d.price - min) / range) * (h - 10) - 5} r={2} fill={color} />
         ))}
       </svg>
-      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 8, opacity: 0.7 }}>
+      <div className="aoe-chart-legend">
         <span>Day {data[0].day}</span>
-        <span>Min {min}c · Max {max}c</span>
+        <span>Low {min}c · High {max}c</span>
         <span>Day {data[data.length - 1].day}</span>
       </div>
     </div>
   );
 }
 
-function Chip({ label, value, swatch }: { label: string; value: string; swatch: string }) {
+function AoeResource({ icon, label, value, color }: { icon: string; label: string; value: string; color?: string }) {
   return (
-    <div className="pixel-chip">
-      <span style={{ width: 10, height: 10, background: swatch, border: "1px solid var(--color-border)", display: "inline-block" }} />
-      <span style={{ opacity: 0.7 }}>{label}</span>
-      <strong>{value}</strong>
+    <div className="aoe-resource">
+      <span className="aoe-resource-icon">{icon}</span>
+      <div className="aoe-resource-info">
+        <span className="aoe-resource-label">{label}</span>
+        <span className="aoe-resource-value" style={color ? { color } : undefined}>{value}</span>
+      </div>
     </div>
   );
 }
 
-function StatusLine({ label, value }: { label: string; value: string }) {
+function AoeStatusLine({ label, value, valueColor }: { label: string; value: string; valueColor?: string }) {
   return (
-    <div className="flex justify-between gap-2" style={{ fontSize: 9, lineHeight: 1.5 }}>
-      <span style={{ opacity: 0.7 }}>{label}</span>
-      <strong style={{ textAlign: "right" }}>{value}</strong>
+    <div className="aoe-status-line">
+      <span className="aoe-status-label">{label}</span>
+      <span className="aoe-status-value" style={valueColor ? { color: valueColor } : undefined}>{value}</span>
     </div>
   );
 }
 
-function Panel({ title, children }: { title: string; children: ReactNode }) {
+function AoePanel({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="pixel-panel p-2 flex flex-col gap-2">
-      <div style={{ fontSize: 10, letterSpacing: 1, textTransform: "uppercase", color: "var(--color-muted-foreground)" }}>{title}</div>
+    <div className="pixel-panel" style={{ padding: "8px 10px" }}>
+      <div className="aoe-panel-title">{title}</div>
       {children}
     </div>
   );
