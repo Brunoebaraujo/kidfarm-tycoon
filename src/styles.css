@@ -28,88 +28,593 @@
   --color-grass: var(--grass);
   --color-soil: var(--soil);
   --color-wood: var(--wood);
-  --font-pixel: "Press Start 2P", monospace;
+  --font-pixel: "Cinzel", "Georgia", serif;
 }
 
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Open+Sans:wght@400;600&display=swap');
+
 :root {
-  --radius: 0.5rem;
-  /* Warm SNES farm palette */
-  --background: oklch(0.78 0.13 145);          /* grass green */
-  --foreground: oklch(0.22 0.04 60);           /* dark brown */
-  --card: oklch(0.95 0.06 85);                 /* parchment */
-  --card-foreground: oklch(0.22 0.04 60);
-  --primary: oklch(0.55 0.18 35);              /* warm red-brown */
-  --primary-foreground: oklch(0.98 0.02 90);
-  --secondary: oklch(0.85 0.12 75);            /* sunny */
-  --secondary-foreground: oklch(0.22 0.04 60);
-  --muted: oklch(0.88 0.05 85);
-  --muted-foreground: oklch(0.40 0.04 60);
-  --accent: oklch(0.70 0.18 145);              /* leaf */
-  --accent-foreground: oklch(0.18 0.04 60);
-  --destructive: oklch(0.55 0.22 27);
-  --border: oklch(0.45 0.08 50);               /* wood brown border */
-  --coin: oklch(0.82 0.17 85);                 /* gold */
-  --sky: oklch(0.85 0.10 230);
-  --grass: oklch(0.72 0.16 142);
-  --soil: oklch(0.40 0.07 50);
-  --wood: oklch(0.45 0.09 50);
+  --radius: 0.25rem;
+
+  /* Age of Empires dark stone/wood palette */
+  --background:          #1a1410;
+  --foreground:          #e8d9b0;
+  --card:                #1e1a12;
+  --card-foreground:     #e8d9b0;
+  --primary:             #8b6914;
+  --primary-foreground:  #fdf0c0;
+  --secondary:           #2e2416;
+  --secondary-foreground:#d4b87a;
+  --muted:               #2a2018;
+  --muted-foreground:    #8a7a56;
+  --accent:              #5a8a1a;
+  --accent-foreground:   #d8f0a0;
+  --destructive:         #8a2010;
+  --border:              #4a3a1a;
+  --coin:                #f0c030;
+  --sky:                 #1a3a5a;
+  --grass:               #2a4a1a;
+  --soil:                #3a2810;
+  --wood:                #5a3a18;
+
+  /* Custom AoE vars */
+  --aoe-gold:            #c8960c;
+  --aoe-gold-light:      #f0d060;
+  --aoe-gold-dark:       #7a5a08;
+  --aoe-stone:           #2a2420;
+  --aoe-stone-mid:       #3a3028;
+  --aoe-stone-light:     #4a4038;
+  --aoe-panel-bg:        rgba(14, 11, 7, 0.96);
+  --aoe-panel-border:    #5a4520;
+  --aoe-highlight:       #d4a030;
+  --aoe-red:             #c03010;
+  --aoe-green:           #3a8020;
+  --aoe-text-gold:       #e8c060;
+  --aoe-text-light:      #d8c89a;
+  --aoe-text-muted:      #7a6a48;
+  --aoe-inset:           rgba(0,0,0,0.5);
 }
 
 @layer base {
   * { border-color: var(--color-border); }
   html, body, #root { height: 100%; }
   body {
-    background: var(--color-background);
-    color: var(--color-foreground);
-    font-family: var(--font-pixel);
-    image-rendering: pixelated;
-    -webkit-font-smoothing: none;
+    background: var(--background);
+    color: var(--foreground);
+    font-family: 'Open Sans', sans-serif;
+    font-size: 13px;
+    image-rendering: auto;
+    -webkit-font-smoothing: antialiased;
   }
 }
 
+/* ============================================================
+   AoE PANEL — stone/wood inset frame
+   ============================================================ */
 @layer components {
+
   .pixel-panel {
-    background: var(--color-card);
-    color: var(--color-card-foreground);
-    border: 3px solid var(--color-border);
-    box-shadow: 0 4px 0 0 var(--color-border), inset 0 0 0 2px oklch(0.99 0.02 90);
-    border-radius: 6px;
-    image-rendering: pixelated;
+    background: var(--aoe-panel-bg);
+    color: var(--aoe-text-light);
+    border: 1px solid var(--aoe-panel-border);
+    border-radius: 3px;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.06),
+      inset 0 -1px 0 rgba(0,0,0,0.6),
+      0 2px 8px rgba(0,0,0,0.7);
+    position: relative;
   }
-  .pixel-btn {
-    font-family: var(--font-pixel);
-    font-size: 10px;
-    line-height: 1.4;
-    padding: 8px 10px;
-    background: var(--color-secondary);
-    color: var(--color-secondary-foreground);
-    border: 3px solid var(--color-border);
-    box-shadow: 0 3px 0 0 var(--color-border);
-    border-radius: 4px;
-    cursor: pointer;
-    transition: transform 80ms, box-shadow 80ms;
+
+  /* Corner rivets — AoE style */
+  .pixel-panel::before,
+  .pixel-panel::after {
+    content: '';
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, #c8960c, #5a3a08);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.8);
+    top: 5px;
+    z-index: 1;
+  }
+  .pixel-panel::before { left: 5px; }
+  .pixel-panel::after  { right: 5px; }
+
+  /* ============================================================
+     RESOURCE BAR — top strip, AoE style
+     ============================================================ */
+  .aoe-topbar {
+    background: linear-gradient(180deg, #0e0b07 0%, #1a1408 50%, #0e0b07 100%);
+    border-bottom: 2px solid var(--aoe-gold-dark);
+    box-shadow: 0 2px 12px rgba(0,0,0,0.9);
+    padding: 0 8px;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    height: 44px;
+    flex-shrink: 0;
+  }
+
+  .aoe-resource {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border-left: 1px solid rgba(90,69,32,0.4);
+    min-width: 72px;
+  }
+  .aoe-resource:first-child { border-left: none; }
+
+  .aoe-resource-icon {
+    font-size: 16px;
+    line-height: 1;
+    filter: drop-shadow(0 1px 2px rgba(0,0,0,0.8));
+  }
+
+  .aoe-resource-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .aoe-resource-label {
+    font-family: 'Open Sans', sans-serif;
+    font-size: 9px;
+    color: var(--aoe-text-muted);
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    line-height: 1;
   }
-  .pixel-btn:hover:not(:disabled) { background: oklch(0.90 0.14 78); }
-  .pixel-btn:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 1px 0 0 var(--color-border); }
-  .pixel-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-  .pixel-btn.primary { background: var(--color-primary); color: var(--color-primary-foreground); }
-  .pixel-btn.accent { background: var(--color-accent); color: var(--color-accent-foreground); }
-  .pixel-chip {
-    font-family: var(--font-pixel);
+
+  .aoe-resource-value {
+    font-family: 'Cinzel', serif;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--aoe-gold-light);
+    line-height: 1.2;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+  }
+
+  .aoe-resource-value.positive { color: #7ad060; }
+  .aoe-resource-value.negative { color: #e05030; }
+
+  .aoe-topbar-divider {
+    width: 1px;
+    height: 28px;
+    background: linear-gradient(180deg, transparent, var(--aoe-gold-dark), transparent);
+    margin: 0 4px;
+    flex-shrink: 0;
+  }
+
+  /* ============================================================
+     BUTTONS — carved stone / gilded AoE style
+     ============================================================ */
+  .pixel-btn {
+    font-family: 'Cinzel', serif;
     font-size: 10px;
-    padding: 6px 8px;
-    background: var(--color-card);
-    border: 2px solid var(--color-border);
-    border-radius: 4px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    line-height: 1.3;
+    padding: 7px 12px;
+    background: linear-gradient(180deg, #3a2e18 0%, #251e0e 50%, #1e1808 100%);
+    color: var(--aoe-text-gold);
+    border: 1px solid var(--aoe-gold-dark);
+    border-radius: 2px;
+    cursor: pointer;
+    position: relative;
+    text-transform: uppercase;
+    transition: background 120ms, color 120ms, box-shadow 120ms;
+    box-shadow:
+      inset 0 1px 0 rgba(255,220,80,0.12),
+      inset 0 -1px 0 rgba(0,0,0,0.5),
+      0 2px 4px rgba(0,0,0,0.6);
+  }
+
+  .pixel-btn:hover:not(:disabled) {
+    background: linear-gradient(180deg, #4e3e20 0%, #3a2e14 50%, #2a2008 100%);
+    color: var(--aoe-gold-light);
+    border-color: var(--aoe-gold);
+    box-shadow:
+      inset 0 1px 0 rgba(255,220,80,0.22),
+      inset 0 -1px 0 rgba(0,0,0,0.5),
+      0 2px 8px rgba(200,150,12,0.25);
+  }
+
+  .pixel-btn:active:not(:disabled) {
+    background: linear-gradient(180deg, #1e1808 0%, #251e0e 100%);
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.8);
+    transform: translateY(1px);
+  }
+
+  .pixel-btn:disabled {
+    opacity: 0.38;
+    cursor: not-allowed;
+  }
+
+  .pixel-btn.primary {
+    background: linear-gradient(180deg, #6a4e10 0%, #4a3408 50%, #3a2808 100%);
+    color: #fdf0c0;
+    border-color: var(--aoe-gold);
+    box-shadow:
+      inset 0 1px 0 rgba(255,220,80,0.18),
+      inset 0 -1px 0 rgba(0,0,0,0.6),
+      0 2px 6px rgba(200,150,12,0.3);
+  }
+
+  .pixel-btn.primary:hover:not(:disabled) {
+    background: linear-gradient(180deg, #7a5e18 0%, #5a4010 50%, #4a3410 100%);
+    box-shadow:
+      inset 0 1px 0 rgba(255,220,80,0.28),
+      0 2px 12px rgba(200,150,12,0.45);
+  }
+
+  .pixel-btn.accent {
+    background: linear-gradient(180deg, #2a4a10 0%, #1a3008 50%, #122008 100%);
+    color: #b0e060;
+    border-color: #4a7a18;
+  }
+
+  .pixel-btn.accent:hover:not(:disabled) {
+    background: linear-gradient(180deg, #3a5a18 0%, #284010 100%);
+    color: #d0f080;
+    border-color: #6a9a28;
+  }
+
+  /* ============================================================
+     CHIP — inline stat badge
+     ============================================================ */
+  .pixel-chip {
+    font-family: 'Open Sans', sans-serif;
+    font-size: 11px;
+    padding: 4px 10px;
+    background: linear-gradient(180deg, #1e1a10 0%, #141008 100%);
+    border: 1px solid var(--aoe-panel-border);
+    border-radius: 2px;
     display: inline-flex;
     align-items: center;
     gap: 6px;
+    color: var(--aoe-text-light);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), 0 1px 3px rgba(0,0,0,0.6);
   }
+
+  .pixel-chip strong {
+    color: var(--aoe-gold-light);
+    font-weight: 600;
+  }
+
+  /* ============================================================
+     CANVAS — no pixelation, smooth AoE rendering
+     ============================================================ */
   .pixel-canvas {
-    image-rendering: pixelated;
-    image-rendering: crisp-edges;
+    image-rendering: auto;
+    image-rendering: smooth;
     display: block;
+  }
+
+  /* ============================================================
+     SIDE PANEL SECTIONS
+     ============================================================ */
+  .aoe-panel-title {
+    font-family: 'Cinzel', serif;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--aoe-gold);
+    padding-bottom: 5px;
+    border-bottom: 1px solid var(--aoe-panel-border);
+    margin-bottom: 6px;
+    text-shadow: 0 1px 4px rgba(200,150,12,0.4);
+  }
+
+  .aoe-status-line {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    padding: 2px 0;
+    font-size: 11px;
+    border-bottom: 1px solid rgba(90,69,32,0.15);
+  }
+
+  .aoe-status-line:last-child { border-bottom: none; }
+
+  .aoe-status-label {
+    color: var(--aoe-text-muted);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .aoe-status-value {
+    color: var(--aoe-text-light);
+    font-weight: 600;
+    font-size: 11px;
+    text-align: right;
+  }
+
+  /* ============================================================
+     WORKER CARD
+     ============================================================ */
+  .aoe-worker-card {
+    display: flex;
+    align-items: stretch;
+    gap: 4px;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(90,69,32,0.3);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .aoe-worker-card.selected {
+    border-color: var(--aoe-gold-dark);
+    background: rgba(120,80,10,0.18);
+    box-shadow: inset 0 0 0 1px rgba(200,150,12,0.15);
+  }
+
+  /* ============================================================
+     DAY PROGRESS BAR
+     ============================================================ */
+  .aoe-daybar-wrap {
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    height: 6px;
+    background: rgba(0,0,0,0.7);
+    border: 1px solid var(--aoe-panel-border);
+    border-radius: 1px;
+    overflow: hidden;
+  }
+
+  .aoe-daybar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #c8780c, #f0c030, #f8e060);
+    border-radius: 1px;
+    transition: width 0.5s linear;
+    box-shadow: 0 0 6px rgba(240,192,48,0.5);
+  }
+
+  /* ============================================================
+     MESSAGE BOX
+     ============================================================ */
+  .aoe-message {
+    position: absolute;
+    left: 8px;
+    top: 8px;
+    max-width: 70%;
+    background: rgba(10, 8, 4, 0.88);
+    border: 1px solid var(--aoe-panel-border);
+    border-radius: 2px;
+    padding: 5px 10px;
+    font-size: 11px;
+    color: var(--aoe-text-light);
+    pointer-events: none;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.8);
+    font-family: 'Open Sans', sans-serif;
+  }
+
+  /* ============================================================
+     SEASON BANNER
+     ============================================================ */
+  .aoe-banner {
+    position: absolute;
+    left: 50%;
+    top: 12px;
+    transform: translateX(-50%);
+    padding: 8px 24px;
+    font-family: 'Cinzel', serif;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #fdf0c0;
+    background: linear-gradient(180deg, rgba(80,50,8,0.97) 0%, rgba(40,28,4,0.97) 100%);
+    border: 1px solid var(--aoe-gold);
+    border-radius: 2px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.9), 0 0 30px rgba(200,150,12,0.2);
+    text-shadow: 0 2px 6px rgba(200,150,12,0.6);
+    white-space: nowrap;
+  }
+
+  /* ============================================================
+     MODAL OVERLAY
+     ============================================================ */
+  .aoe-modal-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.72);
+    backdrop-filter: blur(1px);
+  }
+
+  .aoe-modal {
+    background: linear-gradient(180deg, #1a1408 0%, #100e06 100%);
+    border: 1px solid var(--aoe-gold-dark);
+    border-radius: 3px;
+    padding: 16px;
+    box-shadow:
+      0 0 0 1px rgba(90,69,32,0.4),
+      0 8px 40px rgba(0,0,0,0.95),
+      inset 0 1px 0 rgba(255,220,80,0.08);
+    min-width: 300px;
+    max-width: 460px;
+    max-height: 92%;
+    overflow: auto;
+    position: relative;
+  }
+
+  .aoe-modal::before,
+  .aoe-modal::after {
+    content: '';
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, #c8960c, #5a3a08);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.9);
+  }
+  .aoe-modal::before { top: 8px; left: 8px; }
+  .aoe-modal::after  { top: 8px; right: 8px; }
+
+  .aoe-modal-title {
+    font-family: 'Cinzel', serif;
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--aoe-gold-light);
+    text-align: center;
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--aoe-panel-border);
+    text-shadow: 0 2px 6px rgba(200,150,12,0.4);
+  }
+
+  /* ============================================================
+     STORE / MARKET ITEMS
+     ============================================================ */
+  .aoe-item-card {
+    background: rgba(0,0,0,0.35);
+    border: 1px solid rgba(90,69,32,0.35);
+    border-radius: 2px;
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    transition: border-color 120ms;
+  }
+
+  .aoe-item-card:hover {
+    border-color: rgba(200,150,12,0.35);
+  }
+
+  .aoe-item-name {
+    font-family: 'Cinzel', serif;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--aoe-gold-light);
+  }
+
+  .aoe-item-desc {
+    font-size: 10px;
+    color: var(--aoe-text-muted);
+    line-height: 1.5;
+  }
+
+  .aoe-item-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px 10px;
+    font-size: 10px;
+    color: var(--aoe-text-light);
+  }
+
+  .aoe-item-grid span { line-height: 1.6; }
+  .aoe-item-grid .profit-pos { color: #7ad060; }
+  .aoe-item-grid .profit-neg { color: #e05030; }
+
+  /* ============================================================
+     TAB BAR
+     ============================================================ */
+  .aoe-tabs {
+    display: flex;
+    gap: 2px;
+    flex-wrap: wrap;
+  }
+
+  .aoe-tab {
+    font-family: 'Cinzel', serif;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    padding: 5px 10px;
+    text-transform: uppercase;
+    background: rgba(0,0,0,0.4);
+    border: 1px solid rgba(90,69,32,0.4);
+    border-radius: 2px 2px 0 0;
+    color: var(--aoe-text-muted);
+    cursor: pointer;
+    transition: all 120ms;
+  }
+
+  .aoe-tab.active {
+    background: rgba(80,55,10,0.6);
+    border-color: var(--aoe-gold-dark);
+    color: var(--aoe-gold-light);
+  }
+
+  .aoe-tab:hover:not(.active) {
+    color: var(--aoe-text-light);
+    border-color: rgba(90,69,32,0.7);
+  }
+
+  /* ============================================================
+     SCROLLBAR — styled to match AoE dark theme
+     ============================================================ */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: rgba(0,0,0,0.4); }
+  ::-webkit-scrollbar-thumb {
+    background: var(--aoe-gold-dark);
+    border-radius: 2px;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: var(--aoe-gold); }
+
+  /* ============================================================
+     ANIMATE FADE IN
+     ============================================================ */
+  .animate-fade-in {
+    animation: aoe-fade-in 0.35s ease-out both;
+  }
+
+  @keyframes aoe-fade-in {
+    from { opacity: 0; transform: translateX(-50%) translateY(-8px); }
+    to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+  }
+
+  /* ============================================================
+     MINI CHART
+     ============================================================ */
+  .aoe-chart-wrap {
+    margin-top: 4px;
+  }
+
+  .aoe-chart-wrap svg {
+    background: rgba(0,0,0,0.4);
+    border: 1px solid rgba(90,69,32,0.35);
+    display: block;
+    max-width: 100%;
+    border-radius: 1px;
+  }
+
+  .aoe-chart-legend {
+    display: flex;
+    justify-content: space-between;
+    font-size: 9px;
+    color: var(--aoe-text-muted);
+    margin-top: 2px;
+  }
+
+  /* ============================================================
+     JOURNAL
+     ============================================================ */
+  .aoe-journal-entry {
+    font-size: 10px;
+    padding: 4px 0;
+    border-bottom: 1px solid rgba(90,69,32,0.18);
+    color: var(--aoe-text-light);
+    line-height: 1.5;
+  }
+
+  .aoe-journal-entry:last-child { border-bottom: none; }
+
+  .aoe-journal-day {
+    font-family: 'Cinzel', serif;
+    font-size: 9px;
+    color: var(--aoe-gold);
+    margin-right: 4px;
   }
 }
